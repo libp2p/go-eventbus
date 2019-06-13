@@ -3,9 +3,9 @@ package event
 import (
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 ///////////////////////
@@ -45,18 +45,63 @@ func (b *bus) withNode(evtType interface{}, cb func(*node)) error {
 	return nil
 }
 
-func (b *bus) Sub(evtType interface{}) (s Subscription, err error) {
+func (b *bus) tryDropNode(evtType interface{}) {
+	path := typePath(reflect.TypeOf(evtType).Elem())
+
+	b.lk.Lock()
+	n, ok := b.nodes[path]
+	if !ok { // already dropped
+		b.lk.Unlock()
+		return
+	}
+
+	n.lk.Lock()
+	if n.nEmitters > 0 || len(n.sinks) > 0 {
+		n.lk.Unlock()
+		b.lk.Unlock()
+		return // still in use
+	}
+	n.lk.Unlock()
+
+	delete(b.nodes, path)
+	b.lk.Unlock()
+}
+
+func (b *bus) Subscribe(evtType interface{}) (s <-chan interface{}, c CancelFunc, err error) {
 	err = b.withNode(evtType, func(n *node) {
-		s = n.sub(0)
+		out, i := n.sub(0)
+		s = out
+		c = func() {
+			n.lk.Lock()
+			delete(n.sinks, i)
+			close(out)
+			tryDrop := len(n.sinks) == 0 && n.nEmitters == 0
+			n.lk.Unlock()
+			if tryDrop {
+				b.tryDropNode(evtType)
+			}
+		}
 	})
 	return
 }
 
-func (b *bus) Emitter(evtType interface{}) (e Emitter, err error) {
+func (b *bus) Emitter(evtType interface{}) (e EmitFunc, c CancelFunc, err error) {
 	err = b.withNode(evtType, func(n *node) {
-		e = &emitter{
-			Closer: closer(func(){}), //TODO: actually do something here
-			node: n,
+		atomic.AddInt32(&n.nEmitters, 1)
+		closed := false
+
+		e = func(event interface{}) {
+			if closed {
+				panic("emitter is closed")
+			}
+			n.emit(event)
+		}
+
+		c = func() {
+			closed = true
+			if atomic.AddInt32(&n.nEmitters, -1) == 0 {
+				b.tryDropNode(evtType)
+			}
 		}
 	})
 	return
@@ -71,8 +116,9 @@ type node struct {
 
 	typ reflect.Type
 
-	n     int
-	sinks map[int]chan interface{}
+	nEmitters int32
+	nSinks int
+	sinks  map[int]chan interface{}
 }
 
 func newNode(typ reflect.Type) *node {
@@ -83,16 +129,15 @@ func newNode(typ reflect.Type) *node {
 	}
 }
 
-func (n *node) sub(buf int) Subscription {
+func (n *node) sub(buf int) (chan interface{}, int) {
 	out := make(chan interface{}, buf)
-	n.n++
-	n.sinks[n.n] = out
-	return &sub{
-		out: out,
-	}
+	i := n.nSinks
+	n.nSinks++
+	n.sinks[i] = out
+	return out, i
 }
 
-func (n *node) Emit(event interface{}) {
+func (n *node) emit(event interface{}) {
 	etype := reflect.TypeOf(event)
 	if etype != n.typ {
 		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, etype))
@@ -102,26 +147,7 @@ func (n *node) Emit(event interface{}) {
 	for _, ch := range n.sinks {
 		ch <- event
 	}
-}
-
-///////////////////////
-// SUB
-
-type sub struct {
-	io.Closer
-	out <-chan interface{}
-}
-
-func (s *sub) Events() <-chan interface{} {
-	return s.out
-}
-
-///////////////////////
-// EMITTERS
-
-type emitter struct {
-	io.Closer
-	*node
+	n.lk.RUnlock()
 }
 
 ///////////////////////
@@ -131,14 +157,4 @@ func typePath(t reflect.Type) string {
 	return t.PkgPath() + "/" + t.String()
 }
 
-type closer func()
-
-func (c closer) Close() error {
-	c()
-	return nil
-}
-
 var _ Bus = &bus{}
-var _ Subscription = &sub{}
-var _ Emitter = &emitter{}
-var _ io.Closer = closer(nil)
