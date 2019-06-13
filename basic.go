@@ -40,8 +40,8 @@ func (b *bus) withNode(evtType interface{}, cb func(*node)) error {
 
 	n.lk.Lock()
 	b.lk.Unlock()
+	defer n.lk.Unlock()
 	cb(n)
-	n.lk.Unlock()
 	return nil
 }
 
@@ -116,8 +116,11 @@ type node struct {
 
 	typ reflect.Type
 
+	// emitter ref count
 	nEmitters int32
-	nSinks int
+
+	// sink index counter
+	sinkC     int
 
 	// TODO: we could make emit a bit faster by making this into an array, but
 	//  it doesn't seem needed for now
@@ -134,8 +137,8 @@ func newNode(typ reflect.Type) *node {
 
 func (n *node) sub(buf int) (chan interface{}, int) {
 	out := make(chan interface{}, buf)
-	i := n.nSinks
-	n.nSinks++
+	i := n.sinkC
+	n.sinkC++
 	n.sinks[i] = out
 	return out, i
 }
