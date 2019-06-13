@@ -2,6 +2,7 @@ package event
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -106,14 +107,14 @@ func TestClosingRaces(t *testing.T) {
 
 	wg.Add(subs + emits)
 
-	bus := NewBus()
+	b := NewBus()
 
 	for i := 0; i < subs; i++ {
 		go func() {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			_, cancel, _ := bus.Subscribe(new(EventA))
+			_, cancel, _ := b.Subscribe(new(EventA))
 			time.Sleep(10 * time.Millisecond)
 			cancel()
 
@@ -125,7 +126,7 @@ func TestClosingRaces(t *testing.T) {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			_, cancel, _ := bus.Emitter(new(EventA))
+			_, cancel, _ := b.Emitter(new(EventA))
 			time.Sleep(10 * time.Millisecond)
 			cancel()
 
@@ -137,4 +138,153 @@ func TestClosingRaces(t *testing.T) {
 	lk.Unlock() // start everything
 
 	wg.Wait()
+
+	if len(b.(*bus).nodes) != 0 {
+		t.Error("expected no nodes")
+	}
+}
+
+func TestSubMany(t *testing.T) {
+	bus := NewBus()
+
+	var r int32
+
+	n := 50000
+	var wait sync.WaitGroup
+	var ready sync.WaitGroup
+	wait.Add(n)
+	ready.Add(n)
+
+	for i := 0; i < n; i++ {
+		go func() {
+			events, cancel, err := bus.Subscribe(new(EventB))
+			if err != nil {
+				panic(err)
+			}
+			defer cancel()
+
+			ready.Done()
+			atomic.AddInt32(&r, int32((<-events).(EventB)))
+			wait.Done()
+		}()
+	}
+
+	emit, cancel, err := bus.Emitter(new(EventB))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+
+	ready.Wait()
+
+	emit(EventB(7))
+	wait.Wait()
+
+	if int(r) != 7 * n {
+		t.Error("got wrong result")
+	}
+}
+
+func testMany(t testing.TB, subs, emits, msgs int) {
+	bus := NewBus()
+
+	var r int64
+
+	var wait sync.WaitGroup
+	var ready sync.WaitGroup
+	wait.Add(subs + emits)
+	ready.Add(subs)
+
+	for i := 0; i < subs; i++ {
+		go func() {
+			events, cancel, err := bus.Subscribe(new(EventB))
+			if err != nil {
+				panic(err)
+			}
+			defer cancel()
+
+			ready.Done()
+			for i := 0; i < emits * msgs; i++ {
+				atomic.AddInt64(&r, int64((<-events).(EventB)))
+			}
+			wait.Done()
+		}()
+	}
+
+	for i := 0; i < emits; i++ {
+		go func() {
+			emit, cancel, err := bus.Emitter(new(EventB))
+			if err != nil {
+				panic(err)
+			}
+			defer cancel()
+
+			ready.Wait()
+
+			for i := 0; i < msgs; i++ {
+				emit(EventB(97))
+			}
+
+			wait.Done()
+		}()
+	}
+
+	wait.Wait()
+
+	if int(r) != 97 * subs * emits * msgs {
+		t.Fatal("got wrong result")
+	}
+}
+
+func TestBothMany(t *testing.T) {
+	testMany(t, 10000, 100, 10)
+}
+
+func BenchmarkSubs(b *testing.B) {
+	b.ReportAllocs()
+	testMany(b, b.N, 100, 100)
+}
+
+func BenchmarkEmits(b *testing.B) {
+	b.ReportAllocs()
+	testMany(b, 100, b.N, 100)
+}
+
+func BenchmarkMsgs(b *testing.B) {
+	b.ReportAllocs()
+	testMany(b, 100, 100, b.N)
+}
+
+func BenchmarkOneToMany(b *testing.B) {
+	b.ReportAllocs()
+	testMany(b, b.N, 1, 100)
+}
+
+func BenchmarkManyToOne(b *testing.B) {
+	b.ReportAllocs()
+	testMany(b, 1, b.N, 100)
+}
+
+func BenchmarkMs1e2m4(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 10, 100, 10000)
+}
+
+func BenchmarkMs1e0m6(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 10, 1, 1000000)
+}
+
+func BenchmarkMs0e6m0(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 1, 1000000, 1)
+}
+
+func BenchmarkMs6e0m0(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 1000000, 1, 1)
 }
