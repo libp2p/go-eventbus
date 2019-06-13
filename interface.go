@@ -1,5 +1,11 @@
 package event
 
+type SubSettings struct {}
+type SubOption func(*SubSettings)
+
+type EmitterSettings struct {}
+type EmitterOption func(*EmitterSettings)
+
 type Bus interface {
 	// Subscribe creates new subscription. Failing to drain the incoming channel
 	// will cause publishers to get blocked
@@ -12,10 +18,10 @@ type Bus interface {
 	// defer cancel()
 	//
 	// evt := (<-sub).(os.Signal) // guaranteed to be safe
-	Subscribe(eventType interface{}) (<-chan interface{}, CancelFunc, error)
+	Subscribe(eventType interface{}, opts ...SubOption) (<-chan interface{}, CancelFunc, error)
 
 
-	Emitter(eventType interface{}) (EmitFunc, CancelFunc, error)
+	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
 }
 
 // EmitFunc emits events. If any channel subscribed to the topic is blocked,

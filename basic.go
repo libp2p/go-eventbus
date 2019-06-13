@@ -67,7 +67,7 @@ func (b *bus) tryDropNode(evtType interface{}) {
 	b.lk.Unlock()
 }
 
-func (b *bus) Subscribe(evtType interface{}) (s <-chan interface{}, c CancelFunc, err error) {
+func (b *bus) Subscribe(evtType interface{}, _ ...SubOption) (s <-chan interface{}, c CancelFunc, err error) {
 	err = b.withNode(evtType, func(n *node) {
 		out, i := n.sub(0)
 		s = out
@@ -85,7 +85,7 @@ func (b *bus) Subscribe(evtType interface{}) (s <-chan interface{}, c CancelFunc
 	return
 }
 
-func (b *bus) Emitter(evtType interface{}) (e EmitFunc, c CancelFunc, err error) {
+func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
 	err = b.withNode(evtType, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		closed := false
@@ -118,6 +118,9 @@ type node struct {
 
 	nEmitters int32
 	nSinks int
+
+	// TODO: we could make emit a bit faster by making this into an array, but
+	//  it doesn't seem needed for now
 	sinks  map[int]chan interface{}
 }
 
