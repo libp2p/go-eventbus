@@ -12,7 +12,7 @@ import (
 // BUS
 
 type bus struct {
-	lk sync.Mutex
+	lk    sync.Mutex
 	nodes map[string]*node
 }
 
@@ -56,7 +56,7 @@ func (b *bus) tryDropNode(evtType interface{}) {
 	}
 
 	n.lk.Lock()
-	if n.nEmitters > 0 || len(n.sinks) > 0 {
+	if n.nEmitters > 0 || n.sinkLen() > 0 {
 		n.lk.Unlock()
 		b.lk.Unlock()
 		return // still in use
@@ -73,9 +73,9 @@ func (b *bus) Subscribe(evtType interface{}, _ ...SubOption) (s <-chan interface
 		s = out
 		c = func() {
 			n.lk.Lock()
-			delete(n.sinks, i)
+			n.sink.Delete(i)
 			close(out)
-			tryDrop := len(n.sinks) == 0 && n.nEmitters == 0
+			tryDrop := n.sinkLen() == 0 && n.nEmitters == 0
 			n.lk.Unlock()
 			if tryDrop {
 				b.tryDropNode(evtType)
@@ -111,6 +111,9 @@ func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c Ca
 // NODE
 
 type node struct {
+	// not under lock
+	sink sync.Map
+
 	// Note: make sure to NEVER lock bus.lk when this lock is held
 	lk sync.RWMutex
 
@@ -120,26 +123,29 @@ type node struct {
 	nEmitters int32
 
 	// sink index counter
-	sinkC     int
-
-	// TODO: we could make emit a bit faster by making this into an array, but
-	//  it doesn't seem needed for now
-	sinks  map[int]chan interface{}
+	sinkC int
 }
 
 func newNode(typ reflect.Type) *node {
 	return &node{
 		typ: typ,
-
-		sinks: map[int]chan interface{}{},
 	}
+}
+
+func (n *node) sinkLen() int {
+	ln := 0
+	n.sink.Range(func(_, _ interface{}) bool {
+		ln = ln + 1
+		return true
+	})
+	return ln
 }
 
 func (n *node) sub(buf int) (chan interface{}, int) {
 	out := make(chan interface{}, buf)
 	i := n.sinkC
 	n.sinkC++
-	n.sinks[i] = out
+	n.sink.Store(i, out)
 	return out, i
 }
 
@@ -149,11 +155,10 @@ func (n *node) emit(event interface{}) {
 		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, etype))
 	}
 
-	n.lk.RLock()
-	for _, ch := range n.sinks {
-		ch <- event
-	}
-	n.lk.RUnlock()
+	n.sink.Range(func(_, ch interface{}) bool {
+		ch.(chan interface{}) <- event
+		return true
+	})
 }
 
 ///////////////////////
