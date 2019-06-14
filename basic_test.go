@@ -185,6 +185,42 @@ func TestSubMany(t *testing.T) {
 	}
 }
 
+func TestSendTo(t *testing.T) {
+	testSendTo(t, 1000)
+}
+
+func testSendTo(t testing.TB, msgs int) {
+	bus := NewBus()
+
+	go func() {
+		emit, cancel, err := bus.Emitter(new(EventB))
+		if err != nil {
+			panic(err)
+		}
+		defer cancel()
+
+		for i := 0; i < msgs; i++ {
+			emit(EventB(97))
+		}
+	}()
+
+	ch := make(chan EventB)
+	cancel, err := bus.SendTo(ch)
+	if err != nil {
+		return
+	}
+	defer cancel()
+
+	r := 0
+	for i := 0; i < msgs; i++ {
+		r += int(<-ch)
+	}
+
+	if int(r) != 97 * msgs {
+		t.Fatal("got wrong result")
+	}
+}
+
 func testMany(t testing.TB, subs, emits, msgs int) {
 	bus := NewBus()
 
@@ -272,9 +308,15 @@ func BenchmarkMs1e2m4(b *testing.B) {
 }
 
 func BenchmarkMs1e0m6(b *testing.B) {
-	b.N = 1000000
+	b.N = 10000000
 	b.ReportAllocs()
 	testMany(b, 10, 1, 1000000)
+}
+
+func BenchmarkMs0e0m6(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 1, 1, 1000000)
 }
 
 func BenchmarkMs0e6m0(b *testing.B) {
@@ -287,4 +329,10 @@ func BenchmarkMs6e0m0(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
 	testMany(b, 1000000, 1, 1)
+}
+
+func BenchmarkSendTo(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testSendTo(b, b.N)
 }

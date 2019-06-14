@@ -69,6 +69,8 @@ func (b *bus) tryDropNode(evtType interface{}) {
 
 func (b *bus) Subscribe(evtType interface{}, _ ...SubOption) (s <-chan interface{}, c CancelFunc, err error) {
 	err = b.withNode(evtType, func(n *node) {
+		// when all subs are waiting on this channel, setting this to 1 doesn't
+		// really affect benchmarks
 		out, i := n.sub(0)
 		s = out
 		c = func() {
@@ -105,6 +107,30 @@ func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c Ca
 		}
 	})
 	return
+}
+
+func (b *bus) SendTo(typedChan interface{}) (CancelFunc, error) {
+	typ := reflect.TypeOf(typedChan)
+	if typ.Kind() != reflect.Chan {
+		return nil, errors.New("expected a channel")
+	}
+	if typ.ChanDir() & reflect.SendDir == 0 {
+		return nil, errors.New("channel doesn't allow send")
+	}
+	etype := reflect.New(typ.Elem())
+	sub, cf, err := b.Subscribe(etype.Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		tcv := reflect.ValueOf(typedChan)
+		for event := range sub {
+			tcv.Send(reflect.ValueOf(event))
+		}
+	}()
+
+	return cf, nil
 }
 
 ///////////////////////

@@ -20,6 +20,7 @@ type Bus interface {
 	// evt := (<-sub).(os.Signal) // guaranteed to be safe
 	Subscribe(eventType interface{}, opts ...SubOption) (<-chan interface{}, CancelFunc, error)
 
+	SendTo(typedChan interface{}) (CancelFunc, error)
 
 	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
 }
