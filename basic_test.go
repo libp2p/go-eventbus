@@ -12,7 +12,8 @@ type EventB int
 
 func TestEmit(t *testing.T) {
 	bus := NewBus()
-	events, cancel, err := bus.Subscribe(new(EventA))
+	events := make(chan EventA)
+	cancel, err := bus.Subscribe(events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,8 @@ func TestEmit(t *testing.T) {
 
 func TestSub(t *testing.T) {
 	bus := NewBus()
-	events, cancel, err := bus.Subscribe(new(EventB))
+	events := make(chan EventB)
+	cancel, err := bus.Subscribe(events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func TestSub(t *testing.T) {
 
 	go func() {
 		defer cancel()
-		event = (<-events).(EventB)
+		event = <-events
 		wait.Done()
 	}()
 
@@ -114,7 +116,7 @@ func TestClosingRaces(t *testing.T) {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			_, cancel, _ := b.Subscribe(new(EventA))
+			cancel, _ := b.Subscribe(make(chan EventA))
 			time.Sleep(10 * time.Millisecond)
 			cancel()
 
@@ -157,14 +159,15 @@ func TestSubMany(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		go func() {
-			events, cancel, err := bus.Subscribe(new(EventB))
+			events := make(chan EventB)
+			cancel, err := bus.Subscribe(events)
 			if err != nil {
 				panic(err)
 			}
 			defer cancel()
 
 			ready.Done()
-			atomic.AddInt32(&r, int32((<-events).(EventB)))
+			atomic.AddInt32(&r, int32(<-events))
 			wait.Done()
 		}()
 	}
@@ -185,6 +188,42 @@ func TestSubMany(t *testing.T) {
 	}
 }
 
+/*func TestSendTo(t *testing.T) {
+	testSendTo(t, 1000)
+}
+
+func testSendTo(t testing.TB, msgs int) {
+	bus := NewBus()
+
+	go func() {
+		emit, cancel, err := bus.Emitter(new(EventB))
+		if err != nil {
+			panic(err)
+		}
+		defer cancel()
+
+		for i := 0; i < msgs; i++ {
+			emit(EventB(97))
+		}
+	}()
+
+	ch := make(chan EventB)
+	cancel, err := bus.SendTo(ch)
+	if err != nil {
+		return
+	}
+	defer cancel()
+
+	r := 0
+	for i := 0; i < msgs; i++ {
+		r += int(<-ch)
+	}
+
+	if int(r) != 97 * msgs {
+		t.Fatal("got wrong result")
+	}
+}*/
+
 func testMany(t testing.TB, subs, emits, msgs int) {
 	bus := NewBus()
 
@@ -197,7 +236,8 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 	for i := 0; i < subs; i++ {
 		go func() {
-			events, cancel, err := bus.Subscribe(new(EventB))
+			events := make(chan EventB)
+			cancel, err := bus.Subscribe(events)
 			if err != nil {
 				panic(err)
 			}
@@ -205,7 +245,7 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 			ready.Done()
 			for i := 0; i < emits * msgs; i++ {
-				atomic.AddInt64(&r, int64((<-events).(EventB)))
+				atomic.AddInt64(&r, int64(<-events))
 			}
 			wait.Done()
 		}()
@@ -275,6 +315,12 @@ func BenchmarkMs1e0m6(b *testing.B) {
 	b.N = 10000000
 	b.ReportAllocs()
 	testMany(b, 10, 1, 1000000)
+}
+
+func BenchmarkMs0e0m6(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 1, 1, 1000000)
 }
 
 func BenchmarkMs0e6m0(b *testing.B) {
