@@ -22,7 +22,7 @@ func NewBus() Bus {
 	}
 }
 
-func (b *bus) withNode(typ reflect.Type, cb func(*node)) error {
+func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) error {
 	path := typePath(typ)
 
 	b.lk.Lock()
@@ -35,8 +35,21 @@ func (b *bus) withNode(typ reflect.Type, cb func(*node)) error {
 
 	n.lk.Lock()
 	b.lk.Unlock()
-	defer n.lk.Unlock()
+
+	ok = false
+	defer func() {
+		if !ok {
+			n.lk.Unlock()
+		}
+		go func() {
+			defer n.lk.Unlock()
+			async(n)
+		}()
+	}()
+
 	cb(n)
+	ok = true
+
 	return nil
 }
 
@@ -87,10 +100,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 	}
 
 	err = b.withNode(typ.Elem(), func(n *node) {
-		// when all subs are waiting on this channel, setting this to 1 doesn't
-		// really affect benchmarks
-		n.sub(refCh)
-
+		n.sinks = append(n.sinks, refCh)
 		c = func() {
 			n.lk.Lock()
 			for i := 0; i < len(n.sinks); i++ {
@@ -106,11 +116,25 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 				b.tryDropNode(typ.Elem())
 			}
 		}
+	}, func(n *node) {
+		if n.keepLast {
+			lastVal, ok := n.last.Load().(reflect.Value)
+			if !ok {
+				return
+			}
+
+			refCh.Send(lastVal)
+		}
 	})
 	return
 }
 
-func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
+func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
+	var settings EmitterSettings
+	for _, opt := range opts {
+		opt(&settings)
+	}
+
 	typ := reflect.TypeOf(evtType)
 	if typ.Kind() != reflect.Ptr {
 		return nil, nil, errors.New("emitter called with non-pointer type")
@@ -120,6 +144,7 @@ func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c Ca
 	err = b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		closed := false
+		n.keepLast = n.keepLast || settings.makeStateful
 
 		e = func(event interface{}) {
 			if closed {
@@ -134,7 +159,7 @@ func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c Ca
 				b.tryDropNode(typ)
 			}
 		}
-	})
+	}, func(_ *node) {})
 	return
 }
 
@@ -151,7 +176,7 @@ type node struct {
 	nEmitters int32
 
 	keepLast bool
-	last     reflect.Value
+	last     atomic.Value
 
 	sinks []reflect.Value
 }
@@ -162,10 +187,6 @@ func newNode(typ reflect.Type) *node {
 	}
 }
 
-func (n *node) sub(outChan reflect.Value) {
-	n.sinks = append(n.sinks, outChan)
-}
-
 func (n *node) emit(event interface{}) {
 	eval := reflect.ValueOf(event)
 	if eval.Type() != n.typ {
@@ -173,6 +194,10 @@ func (n *node) emit(event interface{}) {
 	}
 
 	n.lk.RLock()
+	if n.keepLast {
+		n.last.Store(eval)
+	}
+
 	// TODO: try using reflect.Select
 	for _, ch := range n.sinks {
 		ch.Send(eval)

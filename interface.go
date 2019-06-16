@@ -21,8 +21,14 @@ func ForceSubType(evtType interface{}) SubOption {
 	}
 }
 
-type EmitterSettings struct{}
+type EmitterSettings struct{
+	makeStateful bool
+}
 type EmitterOption func(*EmitterSettings)
+
+func Stateful(s *EmitterSettings) {
+	s.makeStateful = true
+}
 
 type Bus interface {
 	// Subscribe creates new subscription. Failing to drain the channel will cause

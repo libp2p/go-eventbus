@@ -226,7 +226,75 @@ func TestSubType(t *testing.T) {
 	}
 }
 
-func testMany(t testing.TB, subs, emits, msgs int) {
+func TestNonStateful(t *testing.T) {
+	bus := NewBus()
+	emit, cancelE1, err := bus.Emitter(new(EventB))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancelE1()
+
+	eventsA := make(chan EventB, 1)
+	cancelS, err := bus.Subscribe(eventsA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancelS()
+
+	select {
+	case <-eventsA:
+		t.Fatal("didn't expect to get an event")
+	default:
+	}
+
+	emit(EventB(1))
+
+	select {
+	case e := <-eventsA:
+		if e != 1 {
+			t.Fatal("got wrong event")
+		}
+	default:
+		t.Fatal("expected to get an event")
+	}
+
+	eventsB := make(chan EventB, 1)
+	cancelS2, err := bus.Subscribe(eventsB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancelS2()
+
+	select {
+	case <-eventsA:
+		t.Fatal("didn't expect to get an event")
+	default:
+	}
+}
+
+func TestStateful(t *testing.T) {
+	bus := NewBus()
+	emit, cancelE1, err := bus.Emitter(new(EventB), Stateful)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancelE1()
+
+	emit(EventB(2))
+
+	eventsA := make(chan EventB, 1)
+	cancelS, err := bus.Subscribe(eventsA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancelS()
+
+	if <-eventsA != 2 {
+		t.Fatal("got wrong event")
+	}
+}
+
+func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 	bus := NewBus()
 
 	var r int64
@@ -255,7 +323,9 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 	for i := 0; i < emits; i++ {
 		go func() {
-			emit, cancel, err := bus.Emitter(new(EventB))
+			emit, cancel, err := bus.Emitter(new(EventB), func(settings *EmitterSettings) {
+				settings.makeStateful = stateful
+			})
 			if err != nil {
 				panic(err)
 			}
@@ -279,60 +349,72 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 }
 
 func TestBothMany(t *testing.T) {
-	testMany(t, 10000, 100, 10)
+	testMany(t, 10000, 100, 10, false)
 }
 
 func BenchmarkSubs(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, b.N, 100, 100)
+	testMany(b, b.N, 100, 100, false)
 }
 
 func BenchmarkEmits(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 100, b.N, 100)
+	testMany(b, 100, b.N, 100, false)
 }
 
 func BenchmarkMsgs(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 100, 100, b.N)
+	testMany(b, 100, 100, b.N, false)
 }
 
 func BenchmarkOneToMany(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, b.N, 1, 100)
+	testMany(b, b.N, 1, 100, false)
 }
 
 func BenchmarkManyToOne(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 1, b.N, 100)
+	testMany(b, 1, b.N, 100, false)
 }
 
 func BenchmarkMs1e2m4(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
-	testMany(b, 10, 100, 10000)
+	testMany(b, 10, 100, 10000, false)
 }
 
 func BenchmarkMs1e0m6(b *testing.B) {
 	b.N = 10000000
 	b.ReportAllocs()
-	testMany(b, 10, 1, 1000000)
+	testMany(b, 10, 1, 1000000, false)
 }
 
 func BenchmarkMs0e0m6(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
-	testMany(b, 1, 1, 1000000)
+	testMany(b, 1, 1, 1000000, false)
+}
+
+func BenchmarkStatefulMs1e0m6(b *testing.B) {
+	b.N = 10000000
+	b.ReportAllocs()
+	testMany(b, 10, 1, 1000000, true)
+}
+
+func BenchmarkStatefulMs0e0m6(b *testing.B) {
+	b.N = 1000000
+	b.ReportAllocs()
+	testMany(b, 1, 1, 1000000, true)
 }
 
 func BenchmarkMs0e6m0(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
-	testMany(b, 1, 1000000, 1)
+	testMany(b, 1, 1000000, 1, false)
 }
 
 func BenchmarkMs6e0m0(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
-	testMany(b, 1000000, 1, 1)
+	testMany(b, 1000000, 1, 1, false)
 }
