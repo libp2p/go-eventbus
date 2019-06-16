@@ -12,7 +12,7 @@ import (
 // BUS
 
 type bus struct {
-	lk sync.Mutex
+	lk    sync.Mutex
 	nodes map[string]*node
 }
 
@@ -75,7 +75,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 	if typ.Kind() != reflect.Chan {
 		return nil, errors.New("expected a channel")
 	}
-	if typ.ChanDir() & reflect.SendDir == 0 {
+	if typ.ChanDir()&reflect.SendDir == 0 {
 		return nil, errors.New("channel doesn't allow send")
 	}
 
@@ -144,11 +144,14 @@ type node struct {
 	nEmitters int32
 
 	// sink index counter
-	sinkC     int
+	sinkC int
 
 	// TODO: we could make emit a bit faster by making this into an array, but
 	//  it doesn't seem needed for now
-	sinks  map[int]reflect.Value
+	sinks map[int]reflect.Value
+
+	keepLast bool
+	last     reflect.Value
 }
 
 func newNode(typ reflect.Type) *node {
