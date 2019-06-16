@@ -62,7 +62,14 @@ func (b *bus) tryDropNode(typ reflect.Type) {
 	b.lk.Unlock()
 }
 
-func (b *bus) Subscribe(typedChan interface{}, _ ...SubOption) (c CancelFunc, err error) {
+func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
+	var settings SubSettings
+	for _, opt := range opts {
+		if err := opt(&settings); err != nil {
+			return nil, err
+		}
+	}
+
 	refCh := reflect.ValueOf(typedChan)
 	typ := refCh.Type()
 	if typ.Kind() != reflect.Chan {
@@ -70,6 +77,13 @@ func (b *bus) Subscribe(typedChan interface{}, _ ...SubOption) (c CancelFunc, er
 	}
 	if typ.ChanDir() & reflect.SendDir == 0 {
 		return nil, errors.New("channel doesn't allow send")
+	}
+
+	if settings.forcedType != nil {
+		if settings.forcedType.Elem().AssignableTo(typ) {
+			return nil, fmt.Errorf("forced type %s cannot be sent to chan %s", settings.forcedType, typ)
+		}
+		typ = settings.forcedType
 	}
 
 	err = b.withNode(typ.Elem(), func(n *node) {
@@ -159,6 +173,7 @@ func (n *node) emit(event interface{}) {
 	}
 
 	n.lk.RLock()
+	// TODO: try using reflect.Select
 	for _, ch := range n.sinks {
 		ch.Send(eval)
 	}

@@ -1,6 +1,7 @@
 package event
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -9,6 +10,10 @@ import (
 
 type EventA struct{}
 type EventB int
+
+func (EventA) String() string {
+	return "Oh, Hello"
+}
 
 func TestEmit(t *testing.T) {
 	bus := NewBus()
@@ -188,41 +193,38 @@ func TestSubMany(t *testing.T) {
 	}
 }
 
-/*func TestSendTo(t *testing.T) {
-	testSendTo(t, 1000)
-}
-
-func testSendTo(t testing.TB, msgs int) {
+func TestSubType(t *testing.T) {
 	bus := NewBus()
+	events := make(chan fmt.Stringer)
+	cancel, err := bus.Subscribe(events, ForceSubType(new(EventA)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var event fmt.Stringer
+
+	var wait sync.WaitGroup
+	wait.Add(1)
 
 	go func() {
-		emit, cancel, err := bus.Emitter(new(EventB))
-		if err != nil {
-			panic(err)
-		}
 		defer cancel()
-
-		for i := 0; i < msgs; i++ {
-			emit(EventB(97))
-		}
+		event = <-events
+		wait.Done()
 	}()
 
-	ch := make(chan EventB)
-	cancel, err := bus.SendTo(ch)
+	emit, cancel, err := bus.Emitter(new(EventA))
 	if err != nil {
-		return
+		t.Fatal(err)
 	}
 	defer cancel()
 
-	r := 0
-	for i := 0; i < msgs; i++ {
-		r += int(<-ch)
-	}
+	emit(EventA{})
+	wait.Wait()
 
-	if int(r) != 97 * msgs {
-		t.Fatal("got wrong result")
+	if event.String() != "Oh, Hello" {
+		t.Error("didn't get the correct message")
 	}
-}*/
+}
 
 func testMany(t testing.TB, subs, emits, msgs int) {
 	bus := NewBus()

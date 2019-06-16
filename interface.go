@@ -1,7 +1,25 @@
 package event
 
-type SubSettings struct {}
-type SubOption func(*SubSettings)
+import (
+	"errors"
+	"reflect"
+)
+
+type SubSettings struct {
+	forcedType reflect.Type
+}
+type SubOption func(*SubSettings) error
+
+func ForceSubType(evtType interface{}) SubOption {
+	return func(s *SubSettings) error {
+		typ := reflect.TypeOf(evtType)
+		if typ.Kind() != reflect.Ptr {
+			return errors.New("ForceSubType called with non-pointer type")
+		}
+		s.forcedType = typ
+		return nil
+	}
+}
 
 type EmitterSettings struct {}
 type EmitterOption func(*EmitterSettings)
