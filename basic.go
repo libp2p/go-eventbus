@@ -22,12 +22,7 @@ func NewBus() Bus {
 	}
 }
 
-func (b *bus) withNode(evtType interface{}, cb func(*node)) error {
-	typ := reflect.TypeOf(evtType)
-	if typ.Kind() != reflect.Ptr {
-		return errors.New("subscribe called with non-pointer type")
-	}
-	typ = typ.Elem()
+func (b *bus) withNode(typ reflect.Type, cb func(*node)) error {
 	path := typePath(typ)
 
 	b.lk.Lock()
@@ -45,8 +40,8 @@ func (b *bus) withNode(evtType interface{}, cb func(*node)) error {
 	return nil
 }
 
-func (b *bus) tryDropNode(evtType interface{}) {
-	path := typePath(reflect.TypeOf(evtType).Elem())
+func (b *bus) tryDropNode(typ reflect.Type) {
+	path := typePath(typ)
 
 	b.lk.Lock()
 	n, ok := b.nodes[path]
@@ -67,20 +62,27 @@ func (b *bus) tryDropNode(evtType interface{}) {
 	b.lk.Unlock()
 }
 
-func (b *bus) Subscribe(evtType interface{}, _ ...SubOption) (s <-chan interface{}, c CancelFunc, err error) {
-	err = b.withNode(evtType, func(n *node) {
+func (b *bus) Subscribe(typedChan interface{}, _ ...SubOption) (c CancelFunc, err error) {
+	refCh := reflect.ValueOf(typedChan)
+	typ := refCh.Type()
+	if typ.Kind() != reflect.Chan {
+		return nil, errors.New("expected a channel")
+	}
+	if typ.ChanDir() & reflect.SendDir == 0 {
+		return nil, errors.New("channel doesn't allow send")
+	}
+
+	err = b.withNode(typ.Elem(), func(n *node) {
 		// when all subs are waiting on this channel, setting this to 1 doesn't
 		// really affect benchmarks
-		out, i := n.sub(0)
-		s = out
+		i := n.sub(refCh)
 		c = func() {
 			n.lk.Lock()
 			delete(n.sinks, i)
-			close(out)
 			tryDrop := len(n.sinks) == 0 && n.nEmitters == 0
 			n.lk.Unlock()
 			if tryDrop {
-				b.tryDropNode(evtType)
+				b.tryDropNode(typ.Elem())
 			}
 		}
 	})
@@ -88,7 +90,13 @@ func (b *bus) Subscribe(evtType interface{}, _ ...SubOption) (s <-chan interface
 }
 
 func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
-	err = b.withNode(evtType, func(n *node) {
+	typ := reflect.TypeOf(evtType)
+	if typ.Kind() != reflect.Ptr {
+		return nil, nil, errors.New("emitter called with non-pointer type")
+	}
+	typ = typ.Elem()
+
+	err = b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		closed := false
 
@@ -102,35 +110,11 @@ func (b *bus) Emitter(evtType interface{}, _ ...EmitterOption) (e EmitFunc, c Ca
 		c = func() {
 			closed = true
 			if atomic.AddInt32(&n.nEmitters, -1) == 0 {
-				b.tryDropNode(evtType)
+				b.tryDropNode(typ)
 			}
 		}
 	})
 	return
-}
-
-func (b *bus) SendTo(typedChan interface{}) (CancelFunc, error) {
-	typ := reflect.TypeOf(typedChan)
-	if typ.Kind() != reflect.Chan {
-		return nil, errors.New("expected a channel")
-	}
-	if typ.ChanDir() & reflect.SendDir == 0 {
-		return nil, errors.New("channel doesn't allow send")
-	}
-	etype := reflect.New(typ.Elem())
-	sub, cf, err := b.Subscribe(etype.Interface())
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		tcv := reflect.ValueOf(typedChan)
-		for event := range sub {
-			tcv.Send(reflect.ValueOf(event))
-		}
-	}()
-
-	return cf, nil
 }
 
 ///////////////////////
@@ -150,34 +134,33 @@ type node struct {
 
 	// TODO: we could make emit a bit faster by making this into an array, but
 	//  it doesn't seem needed for now
-	sinks  map[int]chan interface{}
+	sinks  map[int]reflect.Value
 }
 
 func newNode(typ reflect.Type) *node {
 	return &node{
 		typ: typ,
 
-		sinks: map[int]chan interface{}{},
+		sinks: map[int]reflect.Value{},
 	}
 }
 
-func (n *node) sub(buf int) (chan interface{}, int) {
-	out := make(chan interface{}, buf)
+func (n *node) sub(outChan reflect.Value) int {
 	i := n.sinkC
 	n.sinkC++
-	n.sinks[i] = out
-	return out, i
+	n.sinks[i] = outChan
+	return i
 }
 
 func (n *node) emit(event interface{}) {
-	etype := reflect.TypeOf(event)
-	if etype != n.typ {
-		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, etype))
+	eval := reflect.ValueOf(event)
+	if eval.Type() != n.typ {
+		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, eval.Type()))
 	}
 
 	n.lk.RLock()
 	for _, ch := range n.sinks {
-		ch <- event
+		ch.Send(eval)
 	}
 	n.lk.RUnlock()
 }

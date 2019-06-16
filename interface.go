@@ -18,9 +18,7 @@ type Bus interface {
 	// defer cancel()
 	//
 	// evt := (<-sub).(os.Signal) // guaranteed to be safe
-	Subscribe(eventType interface{}, opts ...SubOption) (<-chan interface{}, CancelFunc, error)
-
-	SendTo(typedChan interface{}) (CancelFunc, error)
+	Subscribe(typedChan interface{}, opts ...SubOption) (CancelFunc, error)
 
 	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
 }
@@ -32,4 +30,3 @@ type Bus interface {
 type EmitFunc func(event interface{})
 
 type CancelFunc func()
-

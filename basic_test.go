@@ -12,7 +12,8 @@ type EventB int
 
 func TestEmit(t *testing.T) {
 	bus := NewBus()
-	events, cancel, err := bus.Subscribe(new(EventA))
+	events := make(chan EventA)
+	cancel, err := bus.Subscribe(events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,8 @@ func TestEmit(t *testing.T) {
 
 func TestSub(t *testing.T) {
 	bus := NewBus()
-	events, cancel, err := bus.Subscribe(new(EventB))
+	events := make(chan EventB)
+	cancel, err := bus.Subscribe(events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func TestSub(t *testing.T) {
 
 	go func() {
 		defer cancel()
-		event = (<-events).(EventB)
+		event = <-events
 		wait.Done()
 	}()
 
@@ -114,7 +116,7 @@ func TestClosingRaces(t *testing.T) {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			_, cancel, _ := b.Subscribe(new(EventA))
+			cancel, _ := b.Subscribe(make(chan EventA))
 			time.Sleep(10 * time.Millisecond)
 			cancel()
 
@@ -157,14 +159,15 @@ func TestSubMany(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		go func() {
-			events, cancel, err := bus.Subscribe(new(EventB))
+			events := make(chan EventB)
+			cancel, err := bus.Subscribe(events)
 			if err != nil {
 				panic(err)
 			}
 			defer cancel()
 
 			ready.Done()
-			atomic.AddInt32(&r, int32((<-events).(EventB)))
+			atomic.AddInt32(&r, int32(<-events))
 			wait.Done()
 		}()
 	}
@@ -185,7 +188,7 @@ func TestSubMany(t *testing.T) {
 	}
 }
 
-func TestSendTo(t *testing.T) {
+/*func TestSendTo(t *testing.T) {
 	testSendTo(t, 1000)
 }
 
@@ -219,7 +222,7 @@ func testSendTo(t testing.TB, msgs int) {
 	if int(r) != 97 * msgs {
 		t.Fatal("got wrong result")
 	}
-}
+}*/
 
 func testMany(t testing.TB, subs, emits, msgs int) {
 	bus := NewBus()
@@ -233,7 +236,8 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 	for i := 0; i < subs; i++ {
 		go func() {
-			events, cancel, err := bus.Subscribe(new(EventB))
+			events := make(chan EventB)
+			cancel, err := bus.Subscribe(events)
 			if err != nil {
 				panic(err)
 			}
@@ -241,7 +245,7 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 			ready.Done()
 			for i := 0; i < emits * msgs; i++ {
-				atomic.AddInt64(&r, int64((<-events).(EventB)))
+				atomic.AddInt64(&r, int64(<-events))
 			}
 			wait.Done()
 		}()
@@ -329,10 +333,4 @@ func BenchmarkMs6e0m0(b *testing.B) {
 	b.N = 1000000
 	b.ReportAllocs()
 	testMany(b, 1000000, 1, 1)
-}
-
-func BenchmarkSendTo(b *testing.B) {
-	b.N = 1000000
-	b.ReportAllocs()
-	testSendTo(b, b.N)
 }
