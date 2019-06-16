@@ -188,7 +188,7 @@ func TestSubMany(t *testing.T) {
 	emit(EventB(7))
 	wait.Wait()
 
-	if int(r) != 7 * n {
+	if int(r) != 7*n {
 		t.Error("got wrong result")
 	}
 }
@@ -246,7 +246,7 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 			defer cancel()
 
 			ready.Done()
-			for i := 0; i < emits * msgs; i++ {
+			for i := 0; i < emits*msgs; i++ {
 				atomic.AddInt64(&r, int64(<-events))
 			}
 			wait.Done()
@@ -273,7 +273,7 @@ func testMany(t testing.TB, subs, emits, msgs int) {
 
 	wait.Wait()
 
-	if int(r) != 97 * subs * emits * msgs {
+	if int(r) != 97*subs*emits*msgs {
 		t.Fatal("got wrong result")
 	}
 }

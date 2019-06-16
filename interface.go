@@ -21,23 +21,22 @@ func ForceSubType(evtType interface{}) SubOption {
 	}
 }
 
-type EmitterSettings struct {}
+type EmitterSettings struct{}
 type EmitterOption func(*EmitterSettings)
 
 type Bus interface {
-	// Subscribe creates new subscription. Failing to drain the incoming channel
-	// will cause publishers to get blocked
+	// Subscribe creates new subscription. Failing to drain the channel will cause
+	// publishers to get blocked
+	Subscribe(typedChan interface{}, opts ...SubOption) (CancelFunc, error)
+
+	// Emitter creates new emitter
 	//
-	// evtTypes only accepts typed nil pointers, and uses the type information to
+	// eventType accepts typed nil pointers, and uses the type information to
 	// select output type
 	//
 	// Example:
 	// sub, cancel, err := eventbus.Subscribe(new(os.Signal))
 	// defer cancel()
-	//
-	// evt := (<-sub).(os.Signal) // guaranteed to be safe
-	Subscribe(typedChan interface{}, opts ...SubOption) (CancelFunc, error)
-
 	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
 }
 
