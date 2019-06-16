@@ -272,7 +272,7 @@ func BenchmarkMs1e2m4(b *testing.B) {
 }
 
 func BenchmarkMs1e0m6(b *testing.B) {
-	b.N = 1000000
+	b.N = 10000000
 	b.ReportAllocs()
 	testMany(b, 10, 1, 1000000)
 }
