@@ -13,24 +13,22 @@ import (
 
 type bus struct {
 	lk    sync.Mutex
-	nodes map[string]*node
+	nodes map[reflect.Type]*node
 }
 
 func NewBus() Bus {
 	return &bus{
-		nodes: map[string]*node{},
+		nodes: map[reflect.Type]*node{},
 	}
 }
 
 func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) error {
-	path := typePath(typ)
-
 	b.lk.Lock()
 
-	n, ok := b.nodes[path]
+	n, ok := b.nodes[typ]
 	if !ok {
 		n = newNode(typ)
-		b.nodes[path] = n
+		b.nodes[typ] = n
 	}
 
 	n.lk.Lock()
@@ -47,10 +45,8 @@ func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) erro
 }
 
 func (b *bus) tryDropNode(typ reflect.Type) {
-	path := typePath(typ)
-
 	b.lk.Lock()
-	n, ok := b.nodes[path]
+	n, ok := b.nodes[typ]
 	if !ok { // already dropped
 		b.lk.Unlock()
 		return
@@ -64,7 +60,7 @@ func (b *bus) tryDropNode(typ reflect.Type) {
 	}
 	n.lk.Unlock()
 
-	delete(b.nodes, path)
+	delete(b.nodes, typ)
 	b.lk.Unlock()
 }
 
@@ -200,9 +196,5 @@ func (n *node) emit(event interface{}) {
 
 ///////////////////////
 // UTILS
-
-func typePath(t reflect.Type) string {
-	return t.PkgPath() + "/" + t.String()
-}
 
 var _ Bus = &bus{}
