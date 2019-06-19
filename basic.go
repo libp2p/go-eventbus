@@ -13,8 +13,6 @@ import (
 ///////////////////////
 // BUS
 
-type CancelFunc = func()
-
 // basicBus is a type-based event delivery system
 type basicBus struct {
 	lk    sync.Mutex
@@ -104,7 +102,7 @@ func (b *basicBus) tryDropNode(typ reflect.Type) {
 // defer close(ch)
 // cancel, err := eventbus.Subscribe(ch)
 // defer cancel()
-func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubscriptionOpt) (c CancelFunc, err error) {
+func (b *basicBus) Subscribe(typedChan interface{}, opts ...event.SubscriptionOpt) (c event.CancelFunc, err error) {
 	var settings subSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
@@ -168,7 +166,7 @@ func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubscriptionOpt) (c 
 // defer emit.Close() // MUST call this after being done with the emitter
 //
 // emit(EventT{})
-func (b *basicBus) Emitter(evtType interface{}, opts ...EmitterOpt) (e event.Emitter, err error) {
+func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e event.Emitter, err error) {
 	var settings emitterSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {

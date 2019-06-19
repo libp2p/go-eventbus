@@ -3,11 +3,9 @@ package event
 import (
 	"errors"
 	"reflect"
+
+	"github.com/libp2p/go-libp2p-core/event"
 )
-
-type SubscriptionOpt = func(interface{}) error
-
-type EmitterOpt = func(interface{}) error
 
 type subSettings struct {
 	forcedType reflect.Type
@@ -29,7 +27,7 @@ type subSettings struct {
 // eventCh := make(chan fmt.Stringer) // interface { String() string }
 // cancel, err := eventbus.Subscribe(eventCh, event.ForceSubType(new(Event)))
 // [...]
-func ForceSubType(evtType interface{}) SubscriptionOpt {
+func ForceSubType(evtType interface{}) event.SubscriptionOpt {
 	return func(settings interface{}) error {
 		s := settings.(*subSettings)
 		typ := reflect.TypeOf(evtType)
