@@ -10,6 +10,22 @@ type SubSettings struct {
 }
 type SubOption func(*SubSettings) error
 
+// ForceSubType is a Subscribe option which overrides the type to which
+// the subscription will be done. Note that the evtType must be assignable
+// to channel type.
+//
+// This also allows for subscribing to multiple eventbus channels with one
+// Go channel to get better ordering guarantees.
+//
+// Example:
+// type Event struct{}
+// func (Event) String() string {
+//    return "event"
+// }
+//
+// eventCh := make(chan fmt.Stringer) // interface { String() string }
+// cancel, err := eventbus.Subscribe(eventCh, event.ForceSubType(new(Event)))
+// [...]
 func ForceSubType(evtType interface{}) SubOption {
 	return func(s *SubSettings) error {
 		typ := reflect.TypeOf(evtType)
@@ -26,10 +42,18 @@ type EmitterSettings struct{
 }
 type EmitterOption func(*EmitterSettings)
 
+// Stateful is an Emitter option which makes makes the eventbus channel
+// 'remember' last event sent, and when a new subscriber joins the
+// bus, the remembered event is immediately sent to the subscription
+// channel.
+//
+// This allows to provide state tracking for dynamic systems, and/or
+// allows new subscribers to verify that there are Emitters on the channel
 func Stateful(s *EmitterSettings) {
 	s.makeStateful = true
 }
 
+// Bus is an interface to type-based event delivery system
 type Bus interface {
 	// Subscribe creates new subscription. Failing to drain the channel will cause
 	// publishers to get blocked
