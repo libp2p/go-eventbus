@@ -36,19 +36,12 @@ func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) erro
 	n.lk.Lock()
 	b.lk.Unlock()
 
-	ok = false
-	defer func() {
-		if !ok {
-			n.lk.Unlock()
-		}
-		go func() {
-			defer n.lk.Unlock()
-			async(n)
-		}()
-	}()
-
 	cb(n)
-	ok = true
+
+	go func() {
+		defer n.lk.Unlock()
+		async(n)
+	}()
 
 	return nil
 }
