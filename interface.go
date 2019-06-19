@@ -74,8 +74,8 @@ type Bus interface {
 	// select output type
 	//
 	// Example:
-	// emit, cancel, err := eventbus.Emitter(new(EventT))
-	// defer cancel()
+	// emit, err := eventbus.Emitter(new(EventT))
+	// defer emit.Close() // MUST call this after being done with the emitter
 	//
 	// emit(EventT{})
 	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, error)
