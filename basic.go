@@ -11,6 +11,7 @@ import (
 ///////////////////////
 // BUS
 
+// basicBus is a type-based event delivery system
 type basicBus struct {
 	lk    sync.Mutex
 	nodes map[reflect.Type]*node
@@ -64,6 +65,15 @@ func (b *basicBus) tryDropNode(typ reflect.Type) {
 	b.lk.Unlock()
 }
 
+// Subscribe creates new subscription. Failing to drain the channel will cause
+// publishers to get blocked. CancelFunc is guaranteed to return after last send
+// to the channel
+//
+// Example:
+// ch := make(chan EventT, 10)
+// defer close(ch)
+// cancel, err := eventbus.Subscribe(ch)
+// defer cancel()
 func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
 	var settings subSettings
 	for _, opt := range opts {
@@ -118,6 +128,16 @@ func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubOption) (c Cancel
 	return
 }
 
+// Emitter creates new emitter
+//
+// eventType accepts typed nil pointers, and uses the type information to
+// select output type
+//
+// Example:
+// emit, err := eventbus.Emitter(new(EventT))
+// defer emit.Close() // MUST call this after being done with the emitter
+//
+// emit(EventT{})
 func (b *basicBus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, err error) {
 	var settings emitterSettings
 	for _, opt := range opts {
@@ -194,6 +214,18 @@ func (n *node) emit(event interface{}) {
 }
 
 ///////////////////////
-// UTILS
+// TYPES
 
-var _ Bus = &basicBus{}
+var closeEmit struct{}
+
+// EmitFunc emits events. If any channel subscribed to the topic is blocked,
+// calls to EmitFunc will block
+//
+// Calling this function with wrong event type will cause a panic
+type EmitFunc func(event interface{})
+
+func (f EmitFunc) Close() {
+	f(closeEmit)
+}
+
+type CancelFunc func()

@@ -5,8 +5,6 @@ import (
 	"reflect"
 )
 
-var closeEmit struct{}
-
 type subSettings struct {
 	forcedType reflect.Type
 }
@@ -53,44 +51,7 @@ type EmitterOption func(interface{}) error
 //
 // This allows to provide state tracking for dynamic systems, and/or
 // allows new subscribers to verify that there are Emitters on the channel
-func Stateful(s *emitterSettings) {
-	s.makeStateful = true
+func Stateful(s interface{}) error {
+	s.(*emitterSettings).makeStateful = true
+	return nil
 }
-
-// Bus is an interface to type-based event delivery system
-type Bus interface {
-	// Subscribe creates new subscription. Failing to drain the channel will cause
-	// publishers to get blocked. CancelFunc is guaranteed to return after last send
-	// to the channel
-	//
-	// Example:
-	// ch := make(chan EventT, 10)
-	// defer close(ch)
-	// cancel, err := eventbus.Subscribe(ch)
-	// defer cancel()
-	Subscribe(typedChan interface{}, opts ...SubOption) (CancelFunc, error)
-
-	// Emitter creates new emitter
-	//
-	// eventType accepts typed nil pointers, and uses the type information to
-	// select output type
-	//
-	// Example:
-	// emit, err := eventbus.Emitter(new(EventT))
-	// defer emit.Close() // MUST call this after being done with the emitter
-	//
-	// emit(EventT{})
-	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, error)
-}
-
-// EmitFunc emits events. If any channel subscribed to the topic is blocked,
-// calls to EmitFunc will block
-//
-// Calling this function with wrong event type will cause a panic
-type EmitFunc func(event interface{})
-
-func (f EmitFunc) Close() {
-	f(closeEmit)
-}
-
-type CancelFunc func()

@@ -337,8 +337,9 @@ func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 
 	for i := 0; i < emits; i++ {
 		go func() {
-			emit, err := bus.Emitter(new(EventB), func(settings *emitterSettings) {
-				settings.makeStateful = stateful
+			emit, err := bus.Emitter(new(EventB), func(settings interface{}) error {
+				settings.(*emitterSettings).makeStateful = stateful
+				return nil
 			})
 			if err != nil {
 				panic(err)
