@@ -33,6 +33,12 @@ func Stateful(s *EmitterSettings) {
 type Bus interface {
 	// Subscribe creates new subscription. Failing to drain the channel will cause
 	// publishers to get blocked
+	//
+	// Example:
+	// ch := make(chan EventT, 10)
+	// defer close(ch)
+	// cancel, err := eventbus.Subscribe(ch)
+	// defer cancel()
 	Subscribe(typedChan interface{}, opts ...SubOption) (CancelFunc, error)
 
 	// Emitter creates new emitter
@@ -41,8 +47,10 @@ type Bus interface {
 	// select output type
 	//
 	// Example:
-	// sub, cancel, err := eventbus.Subscribe(new(os.Signal))
+	// emit, cancel, err := eventbus.Emitter(new(EventT))
 	// defer cancel()
+	//
+	// emit(EventT{})
 	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
 }
 
