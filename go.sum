@@ -30,8 +30,8 @@ github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvW
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23/go.mod h1:J+Gs4SYgM6CZQHDETBtE9HaSEkGmuNXF86RwHhHUvq4=
 github.com/libp2p/go-flow-metrics v0.0.1/go.mod h1:Iv1GH0sG8DtYN3SVJ2eG221wMiNpZxBdp967ls1g+k8=
-github.com/libp2p/go-libp2p-core v0.0.4-0.20190619144953-3605e610067d h1:x4SH+JE2mvT8g7vZDIX3MSMhulDwHiOOrUI9ZGU+Nfg=
-github.com/libp2p/go-libp2p-core v0.0.4-0.20190619144953-3605e610067d/go.mod h1:j+YQMNz9WNSkNezXOsahp9kwZBKBvxLpKD316QWSJXE=
+github.com/libp2p/go-libp2p-core v0.0.4-0.20190619224540-208efcb902d4 h1:dZ5hV4eFIAIFTA7wNnNKeWMIDbR9fhV/lSQMEpy6q84=
+github.com/libp2p/go-libp2p-core v0.0.4-0.20190619224540-208efcb902d4/go.mod h1:j+YQMNz9WNSkNezXOsahp9kwZBKBvxLpKD316QWSJXE=
 github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1 h1:lYpkrQH5ajf0OXOcUbGjvZxxijuBwbbmlSxLiuofa+g=
 github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1/go.mod h1:pD8RvIylQ358TN4wwqatJ8rNavkEINozVn9DtGI3dfQ=
 github.com/minio/sha256-simd v0.0.0-20190131020904-2d45a736cd16/go.mod h1:2FMWW+8GMoPweT6+pI63m9YE3Lmw4J71hV56Chs1E/U=
