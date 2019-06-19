@@ -11,18 +11,18 @@ import (
 ///////////////////////
 // BUS
 
-type bus struct {
+type BasicBus struct {
 	lk    sync.Mutex
 	nodes map[reflect.Type]*node
 }
 
 func NewBus() Bus {
-	return &bus{
+	return &BasicBus{
 		nodes: map[reflect.Type]*node{},
 	}
 }
 
-func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) error {
+func (b *BasicBus) withNode(typ reflect.Type, cb func(*node), async func(*node)) error {
 	b.lk.Lock()
 
 	n, ok := b.nodes[typ]
@@ -44,7 +44,7 @@ func (b *bus) withNode(typ reflect.Type, cb func(*node), async func(*node)) erro
 	return nil
 }
 
-func (b *bus) tryDropNode(typ reflect.Type) {
+func (b *BasicBus) tryDropNode(typ reflect.Type) {
 	b.lk.Lock()
 	n, ok := b.nodes[typ]
 	if !ok { // already dropped
@@ -64,7 +64,7 @@ func (b *bus) tryDropNode(typ reflect.Type) {
 	b.lk.Unlock()
 }
 
-func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
+func (b *BasicBus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
 	var settings subSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
@@ -118,7 +118,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 	return
 }
 
-func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, err error) {
+func (b *BasicBus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, err error) {
 	var settings emitterSettings
 	for _, opt := range opts {
 		opt(&settings)
@@ -156,7 +156,7 @@ func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, e
 // NODE
 
 type node struct {
-	// Note: make sure to NEVER lock bus.lk when this lock is held
+	// Note: make sure to NEVER lock BasicBus.lk when this lock is held
 	lk sync.RWMutex
 
 	typ reflect.Type
@@ -196,4 +196,4 @@ func (n *node) emit(event interface{}) {
 ///////////////////////
 // UTILS
 
-var _ Bus = &bus{}
+var _ Bus = &BasicBus{}

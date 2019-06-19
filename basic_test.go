@@ -156,7 +156,7 @@ func TestClosingRaces(t *testing.T) {
 
 	wg.Wait()
 
-	if len(b.(*bus).nodes) != 0 {
+	if len(b.(*BasicBus).nodes) != 0 {
 		t.Error("expected no nodes")
 	}
 }
