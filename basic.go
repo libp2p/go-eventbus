@@ -64,7 +64,7 @@ func (b *bus) tryDropNode(typ reflect.Type) {
 	}
 
 	n.lk.Lock()
-	if n.nEmitters > 0 || len(n.sinks) > 0 {
+	if atomic.LoadInt32(&n.nEmitters) > 0 || len(n.sinks) > 0 {
 		n.lk.Unlock()
 		b.lk.Unlock()
 		return // still in use
@@ -110,7 +110,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 					break
 				}
 			}
-			tryDrop := len(n.sinks) == 0 && n.nEmitters == 0
+			tryDrop := len(n.sinks) == 0 && atomic.LoadInt32(&n.nEmitters) == 0
 			n.lk.Unlock()
 			if tryDrop {
 				b.tryDropNode(typ.Elem())

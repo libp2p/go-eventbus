@@ -6,10 +6,20 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jbenet/go-detect-race"
 )
 
 type EventA struct{}
 type EventB int
+
+func getN() int {
+	n := 50000
+	if detectrace.WithRace() {
+		n = 1000
+	}
+	return n
+}
 
 func (EventA) String() string {
 	return "Oh, Hello"
@@ -28,11 +38,11 @@ func TestEmit(t *testing.T) {
 		<-events
 	}()
 
-	emit, cancel, err := bus.Emitter(new(EventA))
+	emit, cancel2, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	defer cancel2()
 
 	emit(EventA{})
 }
@@ -56,11 +66,11 @@ func TestSub(t *testing.T) {
 		wait.Done()
 	}()
 
-	emit, cancel, err := bus.Emitter(new(EventB))
+	emit, cancel2, err := bus.Emitter(new(EventB))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	defer cancel2()
 
 	emit(EventB(7))
 	wait.Wait()
@@ -105,8 +115,8 @@ func TestEmitOnClosed(t *testing.T) {
 }
 
 func TestClosingRaces(t *testing.T) {
-	subs := 50000
-	emits := 50000
+	subs := getN()
+	emits := getN()
 
 	var wg sync.WaitGroup
 	var lk sync.RWMutex
@@ -156,7 +166,7 @@ func TestSubMany(t *testing.T) {
 
 	var r int32
 
-	n := 50000
+	n := getN()
 	var wait sync.WaitGroup
 	var ready sync.WaitGroup
 	wait.Add(n)
@@ -212,11 +222,11 @@ func TestSubType(t *testing.T) {
 		wait.Done()
 	}()
 
-	emit, cancel, err := bus.Emitter(new(EventA))
+	emit, cancel2, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	defer cancel2()
 
 	emit(EventA{})
 	wait.Wait()
@@ -295,6 +305,10 @@ func TestStateful(t *testing.T) {
 }
 
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
+	if detectrace.WithRace() && subs + emits > 5000 {
+		t.SkipNow()
+	}
+
 	bus := NewBus()
 
 	var r int64
