@@ -5,11 +5,13 @@ import (
 	"reflect"
 )
 
+type SubscriptionOpt = func(interface{}) error
+
+type EmitterOpt = func(interface{}) error
+
 type subSettings struct {
 	forcedType reflect.Type
 }
-
-type SubOption func(interface{}) error
 
 // ForceSubType is a Subscribe option which overrides the type to which
 // the subscription will be done. Note that the evtType must be assignable
@@ -27,7 +29,7 @@ type SubOption func(interface{}) error
 // eventCh := make(chan fmt.Stringer) // interface { String() string }
 // cancel, err := eventbus.Subscribe(eventCh, event.ForceSubType(new(Event)))
 // [...]
-func ForceSubType(evtType interface{}) SubOption {
+func ForceSubType(evtType interface{}) SubscriptionOpt {
 	return func(settings interface{}) error {
 		s := settings.(*subSettings)
 		typ := reflect.TypeOf(evtType)
@@ -42,7 +44,6 @@ func ForceSubType(evtType interface{}) SubOption {
 type emitterSettings struct {
 	makeStateful bool
 }
-type EmitterOption func(interface{}) error
 
 // Stateful is an Emitter option which makes makes the eventbus channel
 // 'remember' last event sent, and when a new subscriber joins the

@@ -6,10 +6,14 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"github.com/libp2p/go-libp2p-core/event"
 )
 
 ///////////////////////
 // BUS
+
+type CancelFunc = func()
 
 // basicBus is a type-based event delivery system
 type basicBus struct {
@@ -17,7 +21,33 @@ type basicBus struct {
 	nodes map[reflect.Type]*node
 }
 
-func NewBus() *basicBus {
+var _ event.Bus = (*basicBus)(nil)
+
+type Emitter struct {
+	n       *node
+	typ     reflect.Type
+	closed  int32
+	dropper func(reflect.Type)
+}
+
+func (e *Emitter) Emit(evt interface{}) {
+	if atomic.LoadInt32(&e.closed) != 0 {
+		panic("emitter is closed")
+	}
+	e.n.emit(evt)
+}
+
+func (e *Emitter) Close() error {
+	if !atomic.CompareAndSwapInt32(&e.closed, 0, 1) {
+		panic("closed an emitter more than once")
+	}
+	if atomic.AddInt32(&e.n.nEmitters, -1) == 0 {
+		e.dropper(e.typ)
+	}
+	return nil
+}
+
+func NewBus() event.Bus {
 	return &basicBus{
 		nodes: map[reflect.Type]*node{},
 	}
@@ -74,7 +104,7 @@ func (b *basicBus) tryDropNode(typ reflect.Type) {
 // defer close(ch)
 // cancel, err := eventbus.Subscribe(ch)
 // defer cancel()
-func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
+func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubscriptionOpt) (c CancelFunc, err error) {
 	var settings subSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
@@ -138,10 +168,12 @@ func (b *basicBus) Subscribe(typedChan interface{}, opts ...SubOption) (c Cancel
 // defer emit.Close() // MUST call this after being done with the emitter
 //
 // emit(EventT{})
-func (b *basicBus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, err error) {
+func (b *basicBus) Emitter(evtType interface{}, opts ...EmitterOpt) (e event.Emitter, err error) {
 	var settings emitterSettings
 	for _, opt := range opts {
-		opt(&settings)
+		if err := opt(&settings); err != nil {
+			return nil, err
+		}
 	}
 
 	typ := reflect.TypeOf(evtType)
@@ -152,22 +184,8 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFu
 
 	err = b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
-		closed := false
 		n.keepLast = n.keepLast || settings.makeStateful
-
-		e = func(event interface{}) {
-			if closed {
-				panic("emitter is closed")
-			}
-			if event == closeEmit {
-				closed = true
-				if atomic.AddInt32(&n.nEmitters, -1) == 0 {
-					b.tryDropNode(typ)
-				}
-				return
-			}
-			n.emit(event)
-		}
+		e = &Emitter{n: n, typ: typ, dropper: b.tryDropNode}
 	}, func(_ *node) {})
 	return
 }
@@ -212,20 +230,3 @@ func (n *node) emit(event interface{}) {
 	}
 	n.lk.RUnlock()
 }
-
-///////////////////////
-// TYPES
-
-var closeEmit struct{}
-
-// EmitFunc emits events. If any channel subscribed to the topic is blocked,
-// calls to EmitFunc will block
-//
-// Calling this function with wrong event type will cause a panic
-type EmitFunc func(event interface{})
-
-func (f EmitFunc) Close() {
-	f(closeEmit)
-}
-
-type CancelFunc func()
