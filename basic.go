@@ -65,7 +65,7 @@ func (b *bus) tryDropNode(typ reflect.Type) {
 }
 
 func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc, err error) {
-	var settings SubSettings
+	var settings subSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err
@@ -94,7 +94,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 			n.lk.Lock()
 			for i := 0; i < len(n.sinks); i++ {
 				if n.sinks[i] == refCh {
-					n.sinks[i] = n.sinks[len(n.sinks)-1]
+					n.sinks[i], n.sinks[len(n.sinks)-1] = n.sinks[len(n.sinks)-1], reflect.Value{}
 					n.sinks = n.sinks[:len(n.sinks)-1]
 					break
 				}
@@ -119,7 +119,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 }
 
 func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
-	var settings EmitterSettings
+	var settings emitterSettings
 	for _, opt := range opts {
 		opt(&settings)
 	}
@@ -187,7 +187,6 @@ func (n *node) emit(event interface{}) {
 		n.last.Store(eval)
 	}
 
-	// TODO: try using reflect.Select
 	for _, ch := range n.sinks {
 		ch.Send(eval)
 	}

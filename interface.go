@@ -5,10 +5,10 @@ import (
 	"reflect"
 )
 
-type SubSettings struct {
+type subSettings struct {
 	forcedType reflect.Type
 }
-type SubOption func(*SubSettings) error
+type SubOption func(*subSettings) error
 
 // ForceSubType is a Subscribe option which overrides the type to which
 // the subscription will be done. Note that the evtType must be assignable
@@ -27,7 +27,7 @@ type SubOption func(*SubSettings) error
 // cancel, err := eventbus.Subscribe(eventCh, event.ForceSubType(new(Event)))
 // [...]
 func ForceSubType(evtType interface{}) SubOption {
-	return func(s *SubSettings) error {
+	return func(s *subSettings) error {
 		typ := reflect.TypeOf(evtType)
 		if typ.Kind() != reflect.Ptr {
 			return errors.New("ForceSubType called with non-pointer type")
@@ -37,10 +37,10 @@ func ForceSubType(evtType interface{}) SubOption {
 	}
 }
 
-type EmitterSettings struct{
+type emitterSettings struct {
 	makeStateful bool
 }
-type EmitterOption func(*EmitterSettings)
+type EmitterOption func(*emitterSettings)
 
 // Stateful is an Emitter option which makes makes the eventbus channel
 // 'remember' last event sent, and when a new subscriber joins the
@@ -49,14 +49,15 @@ type EmitterOption func(*EmitterSettings)
 //
 // This allows to provide state tracking for dynamic systems, and/or
 // allows new subscribers to verify that there are Emitters on the channel
-func Stateful(s *EmitterSettings) {
+func Stateful(s *emitterSettings) {
 	s.makeStateful = true
 }
 
 // Bus is an interface to type-based event delivery system
 type Bus interface {
 	// Subscribe creates new subscription. Failing to drain the channel will cause
-	// publishers to get blocked
+	// publishers to get blocked. CancelFunc is guaranteed to return after last send
+	// to the channel
 	//
 	// Example:
 	// ch := make(chan EventT, 10)

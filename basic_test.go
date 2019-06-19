@@ -305,7 +305,7 @@ func TestStateful(t *testing.T) {
 }
 
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
-	if detectrace.WithRace() && subs + emits > 5000 {
+	if detectrace.WithRace() && subs+emits > 5000 {
 		t.SkipNow()
 	}
 
@@ -337,7 +337,7 @@ func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 
 	for i := 0; i < emits; i++ {
 		go func() {
-			emit, cancel, err := bus.Emitter(new(EventB), func(settings *EmitterSettings) {
+			emit, cancel, err := bus.Emitter(new(EventB), func(settings *emitterSettings) {
 				settings.makeStateful = stateful
 			})
 			if err != nil {
