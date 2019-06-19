@@ -118,7 +118,7 @@ func (b *bus) Subscribe(typedChan interface{}, opts ...SubOption) (c CancelFunc,
 	return
 }
 
-func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, c CancelFunc, err error) {
+func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, err error) {
 	var settings emitterSettings
 	for _, opt := range opts {
 		opt(&settings)
@@ -126,7 +126,7 @@ func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, c
 
 	typ := reflect.TypeOf(evtType)
 	if typ.Kind() != reflect.Ptr {
-		return nil, nil, errors.New("emitter called with non-pointer type")
+		return nil, errors.New("emitter called with non-pointer type")
 	}
 	typ = typ.Elem()
 
@@ -139,14 +139,14 @@ func (b *bus) Emitter(evtType interface{}, opts ...EmitterOption) (e EmitFunc, c
 			if closed {
 				panic("emitter is closed")
 			}
-			n.emit(event)
-		}
-
-		c = func() {
-			closed = true
-			if atomic.AddInt32(&n.nEmitters, -1) == 0 {
-				b.tryDropNode(typ)
+			if event == closeEmit {
+				closed = true
+				if atomic.AddInt32(&n.nEmitters, -1) == 0 {
+					b.tryDropNode(typ)
+				}
+				return
 			}
+			n.emit(event)
 		}
 	}, func(_ *node) {})
 	return

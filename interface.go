@@ -5,6 +5,8 @@ import (
 	"reflect"
 )
 
+var closeEmit struct{}
+
 type subSettings struct {
 	forcedType reflect.Type
 }
@@ -76,7 +78,7 @@ type Bus interface {
 	// defer cancel()
 	//
 	// emit(EventT{})
-	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, CancelFunc, error)
+	Emitter(eventType interface{}, opts ...EmitterOption) (EmitFunc, error)
 }
 
 // EmitFunc emits events. If any channel subscribed to the topic is blocked,
@@ -84,5 +86,9 @@ type Bus interface {
 //
 // Calling this function with wrong event type will cause a panic
 type EmitFunc func(event interface{})
+
+func (f EmitFunc) Close() {
+	f(closeEmit)
+}
 
 type CancelFunc func()

@@ -38,11 +38,11 @@ func TestEmit(t *testing.T) {
 		<-events
 	}()
 
-	emit, cancel2, err := bus.Emitter(new(EventA))
+	emit, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel2()
+	defer emit.Close()
 
 	emit(EventA{})
 }
@@ -66,11 +66,11 @@ func TestSub(t *testing.T) {
 		wait.Done()
 	}()
 
-	emit, cancel2, err := bus.Emitter(new(EventB))
+	emit, err := bus.Emitter(new(EventB))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel2()
+	defer emit.Close()
 
 	emit(EventB(7))
 	wait.Wait()
@@ -83,11 +83,11 @@ func TestSub(t *testing.T) {
 func TestEmitNoSubNoBlock(t *testing.T) {
 	bus := NewBus()
 
-	emit, cancel, err := bus.Emitter(new(EventA))
+	emit, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	defer emit.Close()
 
 	emit(EventA{})
 }
@@ -95,11 +95,11 @@ func TestEmitNoSubNoBlock(t *testing.T) {
 func TestEmitOnClosed(t *testing.T) {
 	bus := NewBus()
 
-	emit, cancel, err := bus.Emitter(new(EventA))
+	emit, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cancel()
+	emit.Close()
 
 	defer func() {
 		r := recover()
@@ -143,9 +143,9 @@ func TestClosingRaces(t *testing.T) {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			_, cancel, _ := b.Emitter(new(EventA))
+			emit, _ := b.Emitter(new(EventA))
 			time.Sleep(10 * time.Millisecond)
-			cancel()
+			emit.Close()
 
 			wg.Done()
 		}()
@@ -187,11 +187,11 @@ func TestSubMany(t *testing.T) {
 		}()
 	}
 
-	emit, cancel, err := bus.Emitter(new(EventB))
+	emit, err := bus.Emitter(new(EventB))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	defer emit.Close()
 
 	ready.Wait()
 
@@ -222,11 +222,11 @@ func TestSubType(t *testing.T) {
 		wait.Done()
 	}()
 
-	emit, cancel2, err := bus.Emitter(new(EventA))
+	emit, err := bus.Emitter(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel2()
+	defer emit.Close()
 
 	emit(EventA{})
 	wait.Wait()
@@ -238,11 +238,11 @@ func TestSubType(t *testing.T) {
 
 func TestNonStateful(t *testing.T) {
 	bus := NewBus()
-	emit, cancelE1, err := bus.Emitter(new(EventB))
+	emit, err := bus.Emitter(new(EventB))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancelE1()
+	defer emit.Close()
 
 	eventsA := make(chan EventB, 1)
 	cancelS, err := bus.Subscribe(eventsA)
@@ -284,11 +284,11 @@ func TestNonStateful(t *testing.T) {
 
 func TestStateful(t *testing.T) {
 	bus := NewBus()
-	emit, cancelE1, err := bus.Emitter(new(EventB), Stateful)
+	emit, err := bus.Emitter(new(EventB), Stateful)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancelE1()
+	defer emit.Close()
 
 	emit(EventB(2))
 
@@ -337,13 +337,13 @@ func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 
 	for i := 0; i < emits; i++ {
 		go func() {
-			emit, cancel, err := bus.Emitter(new(EventB), func(settings *emitterSettings) {
+			emit, err := bus.Emitter(new(EventB), func(settings *emitterSettings) {
 				settings.makeStateful = stateful
 			})
 			if err != nil {
 				panic(err)
 			}
-			defer cancel()
+			defer emit.Close()
 
 			ready.Wait()
 
