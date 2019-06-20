@@ -304,6 +304,28 @@ func TestStateful(t *testing.T) {
 	}
 }
 
+func TestCloseBlocking(t *testing.T) {
+	bus := NewBus()
+	em, err := bus.Emitter(new(EventB))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events := make(chan EventB)
+	cancel, err := bus.Subscribe(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		em.Emit(EventB(159))
+	}()
+
+	time.Sleep(10 * time.Millisecond) // make sure that emit is blocked
+
+	cancel() // cancel sub
+}
+
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 	if detectrace.WithRace() && subs+emits > 5000 {
 		t.SkipNow()

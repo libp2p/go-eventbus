@@ -129,7 +129,28 @@ func (b *basicBus) Subscribe(typedChan interface{}, opts ...event.SubscriptionOp
 	err = b.withNode(typ.Elem(), func(n *node) {
 		n.sinks = append(n.sinks, refCh)
 		c = func() {
+			stopDrain := make(chan struct{})
+			go func() {
+				rdrain := reflect.ValueOf(stopDrain)
+				for {
+					chosen, _, _ := reflect.Select([]reflect.SelectCase{
+						{
+							Dir:  reflect.SelectRecv,
+							Chan: refCh,
+						},
+						{
+							Dir:  reflect.SelectRecv,
+							Chan: rdrain,
+						},
+					})
+					if chosen == 1 {
+						return
+					}
+				}
+			}()
 			n.lk.Lock()
+			close(stopDrain)
+
 			for i := 0; i < len(n.sinks); i++ {
 				if n.sinks[i] == refCh {
 					n.sinks[i], n.sinks[len(n.sinks)-1] = n.sinks[len(n.sinks)-1], reflect.Value{}
