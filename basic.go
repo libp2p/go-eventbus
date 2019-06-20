@@ -223,8 +223,12 @@ func (n *node) emit(event interface{}) {
 		n.last.Store(eval)
 	}
 
-	for _, ch := range n.sinks {
+	sinks := make([]reflect.Value, len(n.sinks))
+	copy(sinks, n.sinks)
+
+	n.lk.RUnlock()
+
+	for _, ch := range sinks {
 		ch.Send(eval)
 	}
-	n.lk.RUnlock()
 }
