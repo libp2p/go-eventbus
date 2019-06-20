@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jbenet/go-detect-race"
+	"github.com/libp2p/go-libp2p-testing/race"
 )
 
 type EventA struct{}
@@ -15,7 +15,7 @@ type EventB int
 
 func getN() int {
 	n := 50000
-	if detectrace.WithRace() {
+	if race.WithRace() {
 		n = 1000
 	}
 	return n
@@ -305,7 +305,7 @@ func TestStateful(t *testing.T) {
 }
 
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
-	if detectrace.WithRace() && subs+emits > 5000 {
+	if race.WithRace() && subs+emits > 5000 {
 		t.SkipNow()
 	}
 
