@@ -27,15 +27,14 @@ func (EventA) String() string {
 
 func TestEmit(t *testing.T) {
 	bus := NewBus()
-	events := make(chan EventA)
-	cancel, err := bus.Subscribe(events)
+	sub, err := bus.Subscribe(new(EventA))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	go func() {
-		defer cancel()
-		<-events
+		defer sub.Close()
+		<-sub.Out()
 	}()
 
 	em, err := bus.Emitter(new(EventA))
@@ -49,8 +48,7 @@ func TestEmit(t *testing.T) {
 
 func TestSub(t *testing.T) {
 	bus := NewBus()
-	events := make(chan EventB)
-	cancel, err := bus.Subscribe(events)
+	sub, err := bus.Subscribe(new(EventB))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +59,8 @@ func TestSub(t *testing.T) {
 	wait.Add(1)
 
 	go func() {
-		defer cancel()
-		event = <-events
+		defer sub.Close()
+		event = (<-sub.Out()).(EventB)
 		wait.Done()
 	}()
 
@@ -131,9 +129,9 @@ func TestClosingRaces(t *testing.T) {
 			lk.RLock()
 			defer lk.RUnlock()
 
-			cancel, _ := b.Subscribe(make(chan EventA))
+			sub, _ := b.Subscribe(new(EventA))
 			time.Sleep(10 * time.Millisecond)
-			cancel()
+			sub.Close()
 
 			wg.Done()
 		}()
@@ -174,15 +172,14 @@ func TestSubMany(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		go func() {
-			events := make(chan EventB)
-			cancel, err := bus.Subscribe(events)
+			sub, err := bus.Subscribe(new(EventB))
 			if err != nil {
 				panic(err)
 			}
-			defer cancel()
+			defer sub.Close()
 
 			ready.Done()
-			atomic.AddInt32(&r, int32(<-events))
+			atomic.AddInt32(&r, int32((<-sub.Out()).(EventB)))
 			wait.Done()
 		}()
 	}
@@ -205,8 +202,7 @@ func TestSubMany(t *testing.T) {
 
 func TestSubType(t *testing.T) {
 	bus := NewBus()
-	events := make(chan fmt.Stringer)
-	cancel, err := bus.Subscribe(events, ForceSubType(new(EventA)))
+	sub, err := bus.Subscribe([]interface{}{new(EventA), new(EventB)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,8 +213,8 @@ func TestSubType(t *testing.T) {
 	wait.Add(1)
 
 	go func() {
-		defer cancel()
-		event = <-events
+		defer sub.Close()
+		event = (<-sub.Out()).(EventA)
 		wait.Done()
 	}()
 
@@ -244,15 +240,14 @@ func TestNonStateful(t *testing.T) {
 	}
 	defer em.Close()
 
-	eventsA := make(chan EventB, 1)
-	cancelS, err := bus.Subscribe(eventsA)
+	sub1, err := bus.Subscribe(new(EventB), BufSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancelS()
+	defer sub1.Close()
 
 	select {
-	case <-eventsA:
+	case <-sub1.Out():
 		t.Fatal("didn't expect to get an event")
 	default:
 	}
@@ -260,23 +255,22 @@ func TestNonStateful(t *testing.T) {
 	em.Emit(EventB(1))
 
 	select {
-	case e := <-eventsA:
-		if e != 1 {
+	case e := <-sub1.Out():
+		if e.(EventB) != 1 {
 			t.Fatal("got wrong event")
 		}
 	default:
 		t.Fatal("expected to get an event")
 	}
 
-	eventsB := make(chan EventB, 1)
-	cancelS2, err := bus.Subscribe(eventsB)
+	sub2, err := bus.Subscribe(new(EventB), BufSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancelS2()
+	defer sub2.Close()
 
 	select {
-	case <-eventsA:
+	case <-sub2.Out():
 		t.Fatal("didn't expect to get an event")
 	default:
 	}
@@ -292,14 +286,13 @@ func TestStateful(t *testing.T) {
 
 	em.Emit(EventB(2))
 
-	eventsA := make(chan EventB, 1)
-	cancelS, err := bus.Subscribe(eventsA)
+	sub, err := bus.Subscribe(new(EventB), BufSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancelS()
+	defer sub.Close()
 
-	if <-eventsA != 2 {
+	if (<-sub.Out()).(EventB) != 2 {
 		t.Fatal("got wrong event")
 	}
 }
@@ -320,16 +313,19 @@ func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 
 	for i := 0; i < subs; i++ {
 		go func() {
-			events := make(chan EventB)
-			cancel, err := bus.Subscribe(events)
+			sub, err := bus.Subscribe(new(EventB))
 			if err != nil {
 				panic(err)
 			}
-			defer cancel()
+			defer sub.Close()
 
 			ready.Done()
 			for i := 0; i < emits*msgs; i++ {
-				atomic.AddInt64(&r, int64(<-events))
+				e, ok := <-sub.Out()
+				if !ok {
+					panic("wat")
+				}
+				atomic.AddInt64(&r, int64(e.(EventB)))
 			}
 			wait.Done()
 		}()
