@@ -21,21 +21,21 @@ type basicBus struct {
 
 var _ event.Bus = (*basicBus)(nil)
 
-type Emitter struct {
+type emitter struct {
 	n       *node
 	typ     reflect.Type
 	closed  int32
 	dropper func(reflect.Type)
 }
 
-func (e *Emitter) Emit(evt interface{}) {
+func (e *emitter) Emit(evt interface{}) {
 	if atomic.LoadInt32(&e.closed) != 0 {
 		panic("emitter is closed")
 	}
 	e.n.emit(evt)
 }
 
-func (e *Emitter) Close() error {
+func (e *emitter) Close() error {
 	if !atomic.CompareAndSwapInt32(&e.closed, 0, 1) {
 		panic("closed an emitter more than once")
 	}
@@ -123,7 +123,7 @@ func (s *sub) Close() error {
 	return nil
 }
 
-var _ event.Subscription = &sub{}
+var _ event.Subscription = (*sub)(nil)
 
 // Subscribe creates new subscription. Failing to drain the channel will cause
 // publishers to get blocked. CancelFunc is guaranteed to return after last send
@@ -199,7 +199,7 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 	err = b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		n.keepLast = n.keepLast || settings.makeStateful
-		e = &Emitter{n: n, typ: typ, dropper: b.tryDropNode}
+		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode}
 	}, func(_ *node) {})
 	return
 }
