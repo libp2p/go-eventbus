@@ -1,40 +1,12 @@
 package eventbus
 
-import (
-	"errors"
-	"reflect"
-
-	"github.com/libp2p/go-libp2p-core/event"
-)
-
 type subSettings struct {
-	forcedType reflect.Type
+	buffer int
 }
 
-// ForceSubType is a Subscribe option which overrides the type to which
-// the subscription will be done. Note that the evtType must be assignable
-// to channel type.
-//
-// This also allows for subscribing to multiple eventbus channels with one
-// Go channel to get better ordering guarantees.
-//
-// Example:
-// type Event struct{}
-// func (Event) String() string {
-//    return "event"
-// }
-//
-// eventCh := make(chan fmt.Stringer) // interface { String() string }
-// cancel, err := eventbus.Subscribe(eventCh, event.ForceSubType(new(Event)))
-// [...]
-func ForceSubType(evtType interface{}) event.SubscriptionOpt {
-	return func(settings interface{}) error {
-		s := settings.(*subSettings)
-		typ := reflect.TypeOf(evtType)
-		if typ.Kind() != reflect.Ptr {
-			return errors.New("ForceSubType called with non-pointer type")
-		}
-		s.forcedType = typ
+func BufSize(n int) func(interface{}) error {
+	return func(s interface{}) error {
+		s.(*subSettings).buffer = n
 		return nil
 	}
 }
