@@ -449,3 +449,36 @@ func benchMany(bc benchCase) func(*testing.B) {
 		wait.Wait()
 	}
 }
+
+var div = 100
+
+func BenchmarkSubscribe(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Subscribe(new(EventA))
+		}
+	}
+}
+
+func BenchmarkEmitter(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Emitter(new(EventA))
+		}
+	}
+}
+
+func BenchmarkSubscribeAndEmitter(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Subscribe(new(EventA))
+			bus.Emitter(new(EventA))
+		}
+	}
+}
