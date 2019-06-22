@@ -318,6 +318,21 @@ func TestCloseBlocking(t *testing.T) {
 	sub.Close() // cancel sub
 }
 
+func TestSubFailFully(t *testing.T) {
+	bus := NewBus()
+	em, err := bus.Emitter(new(EventB))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = bus.Subscribe([]interface{}{new(EventB), 5})
+	if err == nil || err.Error() != "subscribe called with non-pointer type" {
+		t.Fatal(err)
+	}
+
+	em.Emit(EventB(159)) // will hang if sub doesn't fail properly
+}
+
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
 	if race.WithRace() && subs+emits > 5000 {
 		t.SkipNow()
