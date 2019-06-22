@@ -363,69 +363,122 @@ func TestBothMany(t *testing.T) {
 	testMany(t, 10000, 100, 10, false)
 }
 
-func BenchmarkSubs(b *testing.B) {
-	b.ReportAllocs()
-	testMany(b, b.N, 100, 100, false)
+type benchCase struct {
+	subs     int
+	emits    int
+	stateful bool
 }
 
-func BenchmarkEmits(b *testing.B) {
-	b.ReportAllocs()
-	testMany(b, 100, b.N, 100, false)
+func (bc benchCase) name() string {
+	return fmt.Sprintf("subs-%03d/emits-%03d/stateful-%t", bc.subs, bc.emits, bc.stateful)
 }
 
-func BenchmarkMsgs(b *testing.B) {
-	b.ReportAllocs()
-	testMany(b, 100, 100, b.N, false)
+func genTestCases() []benchCase {
+	ret := make([]benchCase, 0, 200)
+	for stateful := 0; stateful < 2; stateful++ {
+		for subs := uint(0); subs <= 8; subs = subs + 4 {
+			for emits := uint(0); emits <= 8; emits = emits + 4 {
+				ret = append(ret, benchCase{1 << subs, 1 << emits, stateful == 1})
+			}
+		}
+	}
+	return ret
 }
 
-func BenchmarkOneToMany(b *testing.B) {
-	b.ReportAllocs()
-	testMany(b, b.N, 1, 100, false)
+func BenchmarkEvents(b *testing.B) {
+	for _, bc := range genTestCases() {
+		b.Run(bc.name(), benchMany(bc))
+	}
 }
 
-func BenchmarkManyToOne(b *testing.B) {
-	b.ReportAllocs()
-	testMany(b, 1, b.N, 100, false)
+func benchMany(bc benchCase) func(*testing.B) {
+	return func(b *testing.B) {
+		b.ReportAllocs()
+		subs := bc.subs
+		emits := bc.emits
+		stateful := bc.stateful
+		bus := NewBus()
+		var wait sync.WaitGroup
+		var ready sync.WaitGroup
+		wait.Add(subs + emits)
+		ready.Add(subs + emits)
+
+		for i := 0; i < subs; i++ {
+			go func() {
+				sub, err := bus.Subscribe(new(EventB))
+				if err != nil {
+					panic(err)
+				}
+				defer sub.Close()
+
+				ready.Done()
+				ready.Wait()
+				for i := 0; i < (b.N/emits)*emits; i++ {
+					_, ok := <-sub.Out()
+					if !ok {
+						panic("wat")
+					}
+				}
+				wait.Done()
+			}()
+		}
+
+		for i := 0; i < emits; i++ {
+			go func() {
+				em, err := bus.Emitter(new(EventB), func(settings interface{}) error {
+					settings.(*emitterSettings).makeStateful = stateful
+					return nil
+				})
+				if err != nil {
+					panic(err)
+				}
+				defer em.Close()
+
+				ready.Done()
+				ready.Wait()
+
+				for i := 0; i < b.N/emits; i++ {
+					em.Emit(EventB(97))
+				}
+
+				wait.Done()
+			}()
+		}
+		ready.Wait()
+		b.ResetTimer()
+		wait.Wait()
+	}
 }
 
-func BenchmarkMs1e2m4(b *testing.B) {
-	b.N = 1000000
+var div = 100
+
+func BenchmarkSubscribe(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 10, 100, 10000, false)
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Subscribe(new(EventA))
+		}
+	}
 }
 
-func BenchmarkMs1e0m6(b *testing.B) {
-	b.N = 10000000
+func BenchmarkEmitter(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 10, 1, 1000000, false)
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Emitter(new(EventA))
+		}
+	}
 }
 
-func BenchmarkMs0e0m6(b *testing.B) {
-	b.N = 1000000
+func BenchmarkSubscribeAndEmitter(b *testing.B) {
 	b.ReportAllocs()
-	testMany(b, 1, 1, 1000000, false)
-}
-
-func BenchmarkStatefulMs1e0m6(b *testing.B) {
-	b.N = 10000000
-	b.ReportAllocs()
-	testMany(b, 10, 1, 1000000, true)
-}
-
-func BenchmarkStatefulMs0e0m6(b *testing.B) {
-	b.N = 1000000
-	b.ReportAllocs()
-	testMany(b, 1, 1, 1000000, true)
-}
-
-func BenchmarkMs0e6m0(b *testing.B) {
-	b.N = 1000000
-	b.ReportAllocs()
-	testMany(b, 1, 1000000, 1, false)
-}
-
-func BenchmarkMs6e0m0(b *testing.B) {
-	b.N = 1000000
-	b.ReportAllocs()
-	testMany(b, 1000000, 1, 1, false)
+	for i := 0; i < b.N/div; i++ {
+		bus := NewBus()
+		for j := 0; j < div; j++ {
+			bus.Subscribe(new(EventA))
+			bus.Emitter(new(EventA))
+		}
+	}
 }
