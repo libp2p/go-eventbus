@@ -370,7 +370,7 @@ type benchCase struct {
 }
 
 func (bc benchCase) name() string {
-	return fmt.Sprintf("subs-%d/emits-%d/stateful-%t", bc.subs, bc.emits, bc.stateful)
+	return fmt.Sprintf("subs-%03d/emits-%03d/stateful-%t", bc.subs, bc.emits, bc.stateful)
 }
 
 func genTestCases() []benchCase {
