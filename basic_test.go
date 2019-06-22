@@ -318,6 +318,11 @@ func TestCloseBlocking(t *testing.T) {
 	sub.Close() // cancel sub
 }
 
+func panicOnTimeout(d time.Duration) {
+	<-time.After(d)
+	panic("timeout reached")
+}
+
 func TestSubFailFully(t *testing.T) {
 	bus := NewBus()
 	em, err := bus.Emitter(new(EventB))
@@ -329,6 +334,8 @@ func TestSubFailFully(t *testing.T) {
 	if err == nil || err.Error() != "subscribe called with non-pointer type" {
 		t.Fatal(err)
 	}
+
+	go panicOnTimeout(5 * time.Second)
 
 	em.Emit(EventB(159)) // will hang if sub doesn't fail properly
 }
