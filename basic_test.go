@@ -376,8 +376,8 @@ func (bc benchCase) name() string {
 func genTestCases() []benchCase {
 	ret := make([]benchCase, 0, 200)
 	for stateful := 0; stateful < 2; stateful++ {
-		for subs := uint(0); subs <= 8; subs = subs + 2 {
-			for emits := uint(0); emits <= 8; emits = emits + 2 {
+		for subs := uint(0); subs <= 8; subs = subs + 4 {
+			for emits := uint(0); emits <= 8; emits = emits + 4 {
 				ret = append(ret, benchCase{1 << subs, 1 << emits, stateful == 1})
 			}
 		}
