@@ -25,6 +25,17 @@ func (EventA) String() string {
 	return "Oh, Hello"
 }
 
+func TestDefaultSubIsBuffered(t *testing.T) {
+	bus := NewBus()
+	s, err := bus.Subscribe(new(EventA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cap(s.(*sub).ch) == 0 {
+		t.Fatalf("without any options subscribe should be buffered. was %d", cap(s.(*sub).ch))
+	}
+}
+
 func TestEmit(t *testing.T) {
 	bus := NewBus()
 	sub, err := bus.Subscribe(new(EventA))
