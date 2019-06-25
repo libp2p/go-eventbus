@@ -129,7 +129,7 @@ var _ event.Subscription = (*sub)(nil)
 // publishers to get blocked. CancelFunc is guaranteed to return after last send
 // to the channel
 func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt) (_ event.Subscription, err error) {
-	var settings subSettings
+	settings := subSettings(subSettingsDefault)
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err
@@ -184,6 +184,7 @@ func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt
 // emit(EventT{})
 func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e event.Emitter, err error) {
 	var settings emitterSettings
+
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err
