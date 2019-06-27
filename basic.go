@@ -104,9 +104,21 @@ func (s *sub) Out() <-chan interface{} {
 }
 
 func (s *sub) Close() error {
-	close(s.ch)
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-s.ch:
+			case <-stop:
+				close(s.ch)
+				return
+			}
+		}
+	}()
+
 	for _, n := range s.nodes {
 		n.lk.Lock()
+
 		for i := 0; i < len(n.sinks); i++ {
 			if n.sinks[i] == s.ch {
 				n.sinks[i], n.sinks[len(n.sinks)-1] = n.sinks[len(n.sinks)-1], nil
@@ -114,12 +126,16 @@ func (s *sub) Close() error {
 				break
 			}
 		}
+
 		tryDrop := len(n.sinks) == 0 && atomic.LoadInt32(&n.nEmitters) == 0
+
 		n.lk.Unlock()
+
 		if tryDrop {
 			s.dropper(n.typ)
 		}
 	}
+	close(stop)
 	return nil
 }
 
@@ -148,12 +164,14 @@ func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt
 		dropper: b.tryDropNode,
 	}
 
-	for i, etyp := range types {
-		typ := reflect.TypeOf(etyp)
-
-		if typ.Kind() != reflect.Ptr {
+	for _, etyp := range types {
+		if reflect.TypeOf(etyp).Kind() != reflect.Ptr {
 			return nil, errors.New("subscribe called with non-pointer type")
 		}
+	}
+
+	for i, etyp := range types {
+		typ := reflect.TypeOf(etyp)
 
 		err = b.withNode(typ.Elem(), func(n *node) {
 			n.sinks = append(n.sinks, out.ch)
