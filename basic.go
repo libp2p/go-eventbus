@@ -104,15 +104,10 @@ func (s *sub) Out() <-chan interface{} {
 }
 
 func (s *sub) Close() error {
-	stop := make(chan struct{})
 	go func() {
-		for {
-			select {
-			case <-s.ch:
-			case <-stop:
-				close(s.ch)
-				return
-			}
+		// drain the event channel, will return when closed and drained.
+		// this is necessary to unblock publishes to this channel.
+		for range s.ch {
 		}
 	}()
 
@@ -135,7 +130,7 @@ func (s *sub) Close() error {
 			s.dropper(n.typ)
 		}
 	}
-	close(stop)
+	close(s.ch)
 	return nil
 }
 
