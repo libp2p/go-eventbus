@@ -230,9 +230,9 @@ func newNode(typ reflect.Type) *node {
 }
 
 func (n *node) emit(event interface{}) {
-	eval := reflect.ValueOf(event)
-	if eval.Type() != n.typ {
-		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, eval.Type()))
+	typ := reflect.TypeOf(event)
+	if typ != n.typ {
+		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, typ))
 	}
 
 	n.lk.RLock()
