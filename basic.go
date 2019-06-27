@@ -51,7 +51,7 @@ func NewBus() event.Bus {
 	}
 }
 
-func (b *basicBus) withNode(typ reflect.Type, cb func(*node), async func(*node)) error {
+func (b *basicBus) withNode(typ reflect.Type, cb func(*node), async func(*node)) {
 	b.lk.Lock()
 
 	n, ok := b.nodes[typ]
@@ -65,12 +65,14 @@ func (b *basicBus) withNode(typ reflect.Type, cb func(*node), async func(*node))
 
 	cb(n)
 
-	go func() {
-		defer n.lk.Unlock()
-		async(n)
-	}()
-
-	return nil
+	if async == nil {
+		n.lk.Unlock()
+	} else {
+		go func() {
+			defer n.lk.Unlock()
+			async(n)
+		}()
+	}
 }
 
 func (b *basicBus) tryDropNode(typ reflect.Type) {
@@ -173,7 +175,7 @@ func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt
 	for i, etyp := range types {
 		typ := reflect.TypeOf(etyp)
 
-		err = b.withNode(typ.Elem(), func(n *node) {
+		b.withNode(typ.Elem(), func(n *node) {
 			n.sinks = append(n.sinks, out.ch)
 			out.nodes[i] = n
 		}, func(n *node) {
@@ -215,11 +217,11 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 	}
 	typ = typ.Elem()
 
-	err = b.withNode(typ, func(n *node) {
+	b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		n.keepLast = n.keepLast || settings.makeStateful
 		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode}
-	}, func(_ *node) {})
+	}, nil)
 	return
 }
 
