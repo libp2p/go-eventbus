@@ -38,7 +38,7 @@ func (e *emitter) Emit(evt interface{}) error {
 
 func (e *emitter) Close() error {
 	if !atomic.CompareAndSwapInt32(&e.closed, 0, 1) {
-		panic("closed an emitter more than once")
+		return fmt.Errorf("closed an emitter more than once")
 	}
 	if atomic.AddInt32(&e.n.nEmitters, -1) == 0 {
 		e.dropper(e.typ)
