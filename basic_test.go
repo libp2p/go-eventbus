@@ -111,7 +111,7 @@ func TestEmitOnClosed(t *testing.T) {
 	em.Close()
 	err = em.Emit(EventA{})
 	if err == nil {
-		t.Errorf("expected panic")
+		t.Errorf("expected error")
 	}
 	if err.Error() != "emitter is closed" {
 		t.Error("unexpected message")
