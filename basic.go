@@ -28,16 +28,17 @@ type emitter struct {
 	dropper func(reflect.Type)
 }
 
-func (e *emitter) Emit(evt interface{}) {
+func (e *emitter) Emit(evt interface{}) error {
 	if atomic.LoadInt32(&e.closed) != 0 {
-		panic("emitter is closed")
+		return fmt.Errorf("emitter is closed")
 	}
 	e.n.emit(evt)
+	return nil
 }
 
 func (e *emitter) Close() error {
 	if !atomic.CompareAndSwapInt32(&e.closed, 0, 1) {
-		panic("closed an emitter more than once")
+		return fmt.Errorf("closed an emitter more than once")
 	}
 	if atomic.AddInt32(&e.n.nEmitters, -1) == 0 {
 		e.dropper(e.typ)

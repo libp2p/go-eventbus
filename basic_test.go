@@ -109,18 +109,13 @@ func TestEmitOnClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	em.Close()
-
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Errorf("expected panic")
-		}
-		if r.(string) != "emitter is closed" {
-			t.Error("unexpected message")
-		}
-	}()
-
-	em.Emit(EventA{})
+	err = em.Emit(EventA{})
+	if err == nil {
+		t.Errorf("expected error")
+	}
+	if err.Error() != "emitter is closed" {
+		t.Error("unexpected message")
+	}
 }
 
 func TestClosingRaces(t *testing.T) {
