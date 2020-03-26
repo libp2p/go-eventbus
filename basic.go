@@ -221,6 +221,26 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 	return
 }
 
+func (b *basicBus) EmitterCount(evtType interface{}) (int, error) {
+	// discern the type of the interface and ensure it's a pointer
+	typ := reflect.TypeOf(evtType)
+	if typ.Kind() != reflect.Ptr {
+		return 0, errors.New("emitterCount called with non-pointer type")
+	}
+	typ = typ.Elem()
+
+	// get the count
+	b.lk.Lock()
+	n, ok := b.nodes[typ]
+	if !ok {
+		b.lk.Unlock()
+		return 0, nil
+	}
+	b.lk.Unlock()
+
+	return int(atomic.LoadInt32(&n.nEmitters)), nil
+}
+
 ///////////////////////
 // NODE
 

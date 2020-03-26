@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p-testing/race"
+	"github.com/stretchr/testify/require"
 )
 
 type EventA struct{}
@@ -87,6 +88,29 @@ func TestSub(t *testing.T) {
 	if event != 7 {
 		t.Error("got wrong event")
 	}
+}
+
+func TestEmitterCount(t *testing.T) {
+	bus := NewBus()
+	c, err := bus.EmitterCount(new(EventB))
+	require.NoError(t, err)
+	require.Equal(t, 0, c)
+
+	em, err := bus.Emitter(new(EventB))
+	defer em.Close()
+	require.NoError(t, err)
+	c, err = bus.EmitterCount(new(EventB))
+	require.Equal(t, 1, c)
+
+	em2, err := bus.Emitter(new(EventB))
+	defer em2.Close()
+	require.NoError(t, err)
+	c, err = bus.EmitterCount(new(EventB))
+	require.Equal(t, 2, c)
+
+	// test for error
+	_, err = bus.EmitterCount(EventA{})
+	require.Error(t, err)
 }
 
 func TestEmitNoSubNoBlock(t *testing.T) {
