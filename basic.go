@@ -15,7 +15,7 @@ import (
 
 // basicBus is a type-based event delivery system
 type basicBus struct {
-	lk    sync.Mutex
+	lk    sync.RWMutex
 	nodes map[reflect.Type]*node
 }
 
@@ -219,6 +219,19 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode}
 	}, nil)
 	return
+}
+
+// GetAllEventTypes returns all the event types that this bus has emitters
+// or subscribers for.
+func (b *basicBus) GetAllEventTypes() []reflect.Type {
+	b.lk.RLock()
+	defer b.lk.RUnlock()
+
+	types := make([]reflect.Type, 0, len(b.nodes))
+	for t, _ := range b.nodes {
+		types = append(types, t)
+	}
+	return types
 }
 
 ///////////////////////

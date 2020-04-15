@@ -2,12 +2,15 @@ package eventbus
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/libp2p/go-libp2p-testing/race"
+
+	"github.com/stretchr/testify/require"
 )
 
 type EventA struct{}
@@ -87,6 +90,26 @@ func TestSub(t *testing.T) {
 	if event != 7 {
 		t.Error("got wrong event")
 	}
+}
+
+func TestGetAllEventTypes(t *testing.T) {
+	bus := NewBus()
+	require.Empty(t, bus.GetAllEventTypes())
+
+	_, err := bus.Subscribe(new(EventB))
+	require.NoError(t, err)
+
+	evts := bus.GetAllEventTypes()
+	require.Len(t, evts, 1)
+	require.Equal(t, reflect.TypeOf((*EventB)(nil)).Elem(), evts[0])
+
+	_, err = bus.Emitter(new(EventA))
+	require.NoError(t, err)
+
+	evts = bus.GetAllEventTypes()
+	require.Len(t, evts, 2)
+	require.Contains(t, evts, reflect.TypeOf((*EventB)(nil)).Elem())
+	require.Contains(t, evts, reflect.TypeOf((*EventA)(nil)).Elem())
 }
 
 func TestEmitNoSubNoBlock(t *testing.T) {
