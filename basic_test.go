@@ -1,6 +1,7 @@
 package eventbus
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sync"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-testing/race"
 
 	"github.com/stretchr/testify/require"
@@ -227,6 +229,50 @@ func TestSubMany(t *testing.T) {
 	if int(r) != 7*n {
 		t.Error("got wrong result")
 	}
+}
+
+func TestSubscribeAll(t *testing.T) {
+	bus := NewBus()
+	sub, err := bus.Subscribe(event.WildcardSubscriptionType)
+	require.NoError(t, err)
+	defer sub.Close()
+
+	em1, err := bus.Emitter(new(EventA))
+	require.NoError(t, err)
+	defer em1.Close()
+
+	em2, err := bus.Emitter(new(EventB))
+	require.NoError(t, err)
+	defer em2.Close()
+
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var evts []interface{}
+
+LOOP:
+	for {
+		select {
+		case evt := <-sub.Out():
+			if evta, ok := evt.(EventA); ok {
+				evts = append(evts, evta)
+			}
+
+			if evtb, ok := evt.(EventB); ok {
+				evts = append(evts, evtb)
+			}
+
+			if len(evts) == 2 {
+				break LOOP
+			}
+
+		case <-ctx.Done():
+			t.Fatalf("did not recieve events")
+		}
+	}
+
 }
 
 func TestSubType(t *testing.T) {

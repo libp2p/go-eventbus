@@ -10,6 +10,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/event"
 )
 
+var wildCardTypeElem = reflect.TypeOf(event.WildcardSubscriptionType).Elem()
+
 ///////////////////////
 // BUS
 
@@ -26,6 +28,7 @@ type emitter struct {
 	typ     reflect.Type
 	closed  int32
 	dropper func(reflect.Type)
+	b       *basicBus
 }
 
 func (e *emitter) Emit(evt interface{}) error {
@@ -33,6 +36,16 @@ func (e *emitter) Emit(evt interface{}) error {
 		return fmt.Errorf("emitter is closed")
 	}
 	e.n.emit(evt)
+
+	// emit on the wildcard subscription
+	e.b.lk.RLock()
+	n, ok := e.b.nodes[wildCardTypeElem]
+	e.b.lk.RUnlock()
+	if !ok {
+		return nil
+	}
+	n.emit(evt)
+
 	return nil
 }
 
@@ -216,7 +229,7 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 	b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		n.keepLast = n.keepLast || settings.makeStateful
-		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode}
+		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode, b: b}
 	}, nil)
 	return
 }
@@ -258,19 +271,19 @@ func newNode(typ reflect.Type) *node {
 	}
 }
 
-func (n *node) emit(event interface{}) {
-	typ := reflect.TypeOf(event)
-	if typ != n.typ {
+func (n *node) emit(evt interface{}) {
+	typ := reflect.TypeOf(evt)
+	if typ != n.typ && n.typ != wildCardTypeElem {
 		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, typ))
 	}
 
 	n.lk.Lock()
 	if n.keepLast {
-		n.last = event
+		n.last = evt
 	}
 
 	for _, ch := range n.sinks {
-		ch <- event
+		ch <- evt
 	}
 	n.lk.Unlock()
 }
