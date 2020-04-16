@@ -81,6 +81,8 @@ github.com/libp2p/go-libp2p-core v0.3.2-0.20200415071619-8fb76f42df50 h1:A/euch2
 github.com/libp2p/go-libp2p-core v0.3.2-0.20200415071619-8fb76f42df50/go.mod h1:thvWy0hvaSBhnVBaW37BvzgVV68OUhgJJLAa6almrII=
 github.com/libp2p/go-libp2p-core v0.3.2-0.20200415154218-9126769533e2 h1:3j584ZSRFrrS0ZPfDKqiPtjnLo8enn4WH8xhdRkYa+o=
 github.com/libp2p/go-libp2p-core v0.3.2-0.20200415154218-9126769533e2/go.mod h1:thvWy0hvaSBhnVBaW37BvzgVV68OUhgJJLAa6almrII=
+github.com/libp2p/go-libp2p-core v0.3.2-0.20200416170247-0a7a9856715c h1:IYaFZg3eDAGtXS32hN8qZ/QFbal9+ASqZuNOnyRkV3g=
+github.com/libp2p/go-libp2p-core v0.3.2-0.20200416170247-0a7a9856715c/go.mod h1:thvWy0hvaSBhnVBaW37BvzgVV68OUhgJJLAa6almrII=
 github.com/libp2p/go-libp2p-core v0.5.0 h1:FBQ1fpq2Fo/ClyjojVJ5AKXlKhvNc/B6U0O+7AN1ffE=
 github.com/libp2p/go-libp2p-core v0.5.0/go.mod h1:49XGI+kc38oGVwqSBhDEwytaAxgZasHhFfQKibzTls0=
 github.com/libp2p/go-libp2p-testing v0.0.4 h1:Qev57UR47GcLPXWjrunv5aLIQGO4n9mhI/8/EIrEEFc=
