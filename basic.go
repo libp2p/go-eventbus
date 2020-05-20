@@ -275,16 +275,19 @@ func (b *basicBus) GetAllEventTypes() []reflect.Type {
 
 type wildcardNode struct {
 	sync.RWMutex
-	sinks []chan interface{}
+	nSinks int32
+	sinks  []chan interface{}
 }
 
 func (n *wildcardNode) addSink(ch chan interface{}) {
+	atomic.AddInt32(&n.nSinks, 1) // ok to do outside the lock
 	n.Lock()
 	n.sinks = append(n.sinks, ch)
 	n.Unlock()
 }
 
 func (n *wildcardNode) removeSink(ch chan interface{}) {
+	atomic.AddInt32(&n.nSinks, -1) // ok to do outside the lock
 	n.Lock()
 	for i := 0; i < len(n.sinks); i++ {
 		if n.sinks[i] == ch {
@@ -297,6 +300,10 @@ func (n *wildcardNode) removeSink(ch chan interface{}) {
 }
 
 func (n *wildcardNode) emit(evt interface{}) {
+	if atomic.LoadInt32(&n.nSinks) == 0 {
+		return
+	}
+
 	n.RLock()
 	for _, ch := range n.sinks {
 		ch <- evt
