@@ -235,8 +235,11 @@ func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt
 //
 // emit(EventT{})
 func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e event.Emitter, err error) {
-	var settings emitterSettings
+	if evtType == event.WildcardSubscription {
+		return nil, fmt.Errorf("illegal emitter for wildcard subscription")
+	}
 
+	var settings emitterSettings
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err

@@ -98,7 +98,11 @@ func TestGetAllEventTypes(t *testing.T) {
 	bus := NewBus()
 	require.Empty(t, bus.GetAllEventTypes())
 
-	_, err := bus.Subscribe(new(EventB))
+	// the wildcard subscription should be returned.
+	_, err := bus.Subscribe(event.WildcardSubscription)
+	require.NoError(t, err)
+
+	_, err = bus.Subscribe(new(EventB))
 	require.NoError(t, err)
 
 	evts := bus.GetAllEventTypes()
@@ -323,10 +327,13 @@ func TestManyWildcardSubscriptions(t *testing.T) {
 	}
 }
 
-func TestCannotSubscribeWildcardInVariadic(t *testing.T) {
+func TestWildcardValidations(t *testing.T) {
 	bus := NewBus()
 
 	_, err := bus.Subscribe([]interface{}{event.WildcardSubscription, new(EventA), new(EventB)})
+	require.Error(t, err)
+
+	_, err = bus.Emitter(event.WildcardSubscription)
 	require.Error(t, err)
 }
 
