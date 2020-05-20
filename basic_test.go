@@ -1,13 +1,18 @@
 package eventbus
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-testing/race"
+
+	"github.com/stretchr/testify/require"
 )
 
 type EventA struct{}
@@ -87,6 +92,30 @@ func TestSub(t *testing.T) {
 	if event != 7 {
 		t.Error("got wrong event")
 	}
+}
+
+func TestGetAllEventTypes(t *testing.T) {
+	bus := NewBus()
+	require.Empty(t, bus.GetAllEventTypes())
+
+	// the wildcard subscription should be returned.
+	_, err := bus.Subscribe(event.WildcardSubscription)
+	require.NoError(t, err)
+
+	_, err = bus.Subscribe(new(EventB))
+	require.NoError(t, err)
+
+	evts := bus.GetAllEventTypes()
+	require.Len(t, evts, 1)
+	require.Equal(t, reflect.TypeOf((*EventB)(nil)).Elem(), evts[0])
+
+	_, err = bus.Emitter(new(EventA))
+	require.NoError(t, err)
+
+	evts = bus.GetAllEventTypes()
+	require.Len(t, evts, 2)
+	require.Contains(t, evts, reflect.TypeOf((*EventB)(nil)).Elem())
+	require.Contains(t, evts, reflect.TypeOf((*EventA)(nil)).Elem())
 }
 
 func TestEmitNoSubNoBlock(t *testing.T) {
@@ -204,6 +233,108 @@ func TestSubMany(t *testing.T) {
 	if int(r) != 7*n {
 		t.Error("got wrong result")
 	}
+}
+
+func TestWildcardSubscription(t *testing.T) {
+	bus := NewBus()
+	sub, err := bus.Subscribe(event.WildcardSubscription)
+	require.NoError(t, err)
+	defer sub.Close()
+
+	em1, err := bus.Emitter(new(EventA))
+	require.NoError(t, err)
+	defer em1.Close()
+
+	em2, err := bus.Emitter(new(EventB))
+	require.NoError(t, err)
+	defer em2.Close()
+
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var evts []interface{}
+
+LOOP:
+	for {
+		select {
+		case evt := <-sub.Out():
+			if evta, ok := evt.(EventA); ok {
+				evts = append(evts, evta)
+			}
+
+			if evtb, ok := evt.(EventB); ok {
+				evts = append(evts, evtb)
+			}
+
+			if len(evts) == 2 {
+				break LOOP
+			}
+
+		case <-ctx.Done():
+			t.Fatalf("did not receive events")
+		}
+	}
+}
+
+func TestManyWildcardSubscriptions(t *testing.T) {
+	bus := NewBus()
+	var subs []event.Subscription
+	for i := 0; i < 10; i++ {
+		sub, err := bus.Subscribe(event.WildcardSubscription)
+		require.NoError(t, err)
+		subs = append(subs, sub)
+	}
+
+	em1, err := bus.Emitter(new(EventA))
+	require.NoError(t, err)
+	defer em1.Close()
+
+	em2, err := bus.Emitter(new(EventB))
+	require.NoError(t, err)
+	defer em2.Close()
+
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	// all 10 subscriptions received all 2 events.
+	for _, s := range subs {
+		require.Len(t, s.Out(), 2)
+	}
+
+	// close the first five subscriptions.
+	for _, s := range subs[:5] {
+		require.NoError(t, s.Close())
+	}
+
+	// emit another 2 events.
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	// the first five still have 2 events, while the other five have 4 events.
+	for _, s := range subs[:5] {
+		require.Len(t, s.Out(), 2)
+	}
+
+	for _, s := range subs[5:] {
+		require.Len(t, s.Out(), 4)
+	}
+
+	// close them all, the first five will be closed twice (asserts idempotency).
+	for _, s := range subs {
+		require.NoError(t, s.Close())
+	}
+}
+
+func TestWildcardValidations(t *testing.T) {
+	bus := NewBus()
+
+	_, err := bus.Subscribe([]interface{}{event.WildcardSubscription, new(EventA), new(EventB)})
+	require.Error(t, err)
+
+	_, err = bus.Emitter(event.WildcardSubscription)
+	require.Error(t, err)
 }
 
 func TestSubType(t *testing.T) {
