@@ -10,25 +10,24 @@ import (
 	"github.com/libp2p/go-libp2p-core/event"
 )
 
-var wildCardTypeElem = reflect.TypeOf(event.WildcardSubscriptionType).Elem()
-
 ///////////////////////
 // BUS
 
 // basicBus is a type-based event delivery system
 type basicBus struct {
-	lk    sync.RWMutex
-	nodes map[reflect.Type]*node
+	lk       sync.RWMutex
+	nodes    map[reflect.Type]*node
+	wildcard *wildcardNode
 }
 
 var _ event.Bus = (*basicBus)(nil)
 
 type emitter struct {
 	n       *node
+	w       *wildcardNode
 	typ     reflect.Type
 	closed  int32
 	dropper func(reflect.Type)
-	b       *basicBus
 }
 
 func (e *emitter) Emit(evt interface{}) error {
@@ -36,15 +35,7 @@ func (e *emitter) Emit(evt interface{}) error {
 		return fmt.Errorf("emitter is closed")
 	}
 	e.n.emit(evt)
-
-	// emit on the wildcard subscription
-	e.b.lk.RLock()
-	n, ok := e.b.nodes[wildCardTypeElem]
-	e.b.lk.RUnlock()
-	if !ok {
-		return nil
-	}
-	n.emit(evt)
+	e.w.emit(evt)
 
 	return nil
 }
@@ -61,7 +52,8 @@ func (e *emitter) Close() error {
 
 func NewBus() event.Bus {
 	return &basicBus{
-		nodes: map[reflect.Type]*node{},
+		nodes:    map[reflect.Type]*node{},
+		wildcard: new(wildcardNode),
 	}
 }
 
@@ -107,6 +99,20 @@ func (b *basicBus) tryDropNode(typ reflect.Type) {
 
 	delete(b.nodes, typ)
 	b.lk.Unlock()
+}
+
+type wildcardSub struct {
+	ch chan interface{}
+	w  *wildcardNode
+}
+
+func (w *wildcardSub) Out() <-chan interface{} {
+	return w.ch
+}
+
+func (w *wildcardSub) Close() error {
+	w.w.removeSink(w.ch)
+	return nil
 }
 
 type sub struct {
@@ -156,16 +162,33 @@ var _ event.Subscription = (*sub)(nil)
 // publishers to get blocked. CancelFunc is guaranteed to return after last send
 // to the channel
 func (b *basicBus) Subscribe(evtTypes interface{}, opts ...event.SubscriptionOpt) (_ event.Subscription, err error) {
-	settings := subSettings(subSettingsDefault)
+	settings := subSettingsDefault
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err
 		}
 	}
 
+	if evtTypes == event.WildcardSubscription {
+		out := &wildcardSub{
+			ch: make(chan interface{}, settings.buffer),
+			w:  b.wildcard,
+		}
+		b.wildcard.addSink(out.ch)
+		return out, nil
+	}
+
 	types, ok := evtTypes.([]interface{})
 	if !ok {
 		types = []interface{}{evtTypes}
+	}
+
+	if len(types) > 1 {
+		for _, t := range types {
+			if t == event.WildcardSubscription {
+				return nil, fmt.Errorf("wildcard subscriptions must be started separately")
+			}
+		}
 	}
 
 	out := &sub{
@@ -229,7 +252,7 @@ func (b *basicBus) Emitter(evtType interface{}, opts ...event.EmitterOpt) (e eve
 	b.withNode(typ, func(n *node) {
 		atomic.AddInt32(&n.nEmitters, 1)
 		n.keepLast = n.keepLast || settings.makeStateful
-		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode, b: b}
+		e = &emitter{n: n, typ: typ, dropper: b.tryDropNode, w: b.wildcard}
 	}, nil)
 	return
 }
@@ -249,6 +272,37 @@ func (b *basicBus) GetAllEventTypes() []reflect.Type {
 
 ///////////////////////
 // NODE
+
+type wildcardNode struct {
+	sync.RWMutex
+	sinks []chan interface{}
+}
+
+func (n *wildcardNode) addSink(ch chan interface{}) {
+	n.Lock()
+	n.sinks = append(n.sinks, ch)
+	n.Unlock()
+}
+
+func (n *wildcardNode) removeSink(ch chan interface{}) {
+	n.Lock()
+	for i := 0; i < len(n.sinks); i++ {
+		if n.sinks[i] == ch {
+			n.sinks[i], n.sinks[len(n.sinks)-1] = n.sinks[len(n.sinks)-1], nil
+			n.sinks = n.sinks[:len(n.sinks)-1]
+			break
+		}
+	}
+	n.Unlock()
+}
+
+func (n *wildcardNode) emit(evt interface{}) {
+	n.RLock()
+	for _, ch := range n.sinks {
+		ch <- evt
+	}
+	n.RUnlock()
+}
 
 type node struct {
 	// Note: make sure to NEVER lock basicBus.lk when this lock is held
@@ -273,7 +327,7 @@ func newNode(typ reflect.Type) *node {
 
 func (n *node) emit(evt interface{}) {
 	typ := reflect.TypeOf(evt)
-	if typ != n.typ && n.typ != wildCardTypeElem {
+	if typ != n.typ {
 		panic(fmt.Sprintf("Emit called with wrong type. expected: %s, got: %s", n.typ, typ))
 	}
 

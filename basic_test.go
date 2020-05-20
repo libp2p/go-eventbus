@@ -231,9 +231,9 @@ func TestSubMany(t *testing.T) {
 	}
 }
 
-func TestSubscribeAll(t *testing.T) {
+func TestWildcardSubscription(t *testing.T) {
 	bus := NewBus()
-	sub, err := bus.Subscribe(event.WildcardSubscriptionType)
+	sub, err := bus.Subscribe(event.WildcardSubscription)
 	require.NoError(t, err)
 	defer sub.Close()
 
@@ -269,10 +269,65 @@ LOOP:
 			}
 
 		case <-ctx.Done():
-			t.Fatalf("did not recieve events")
+			t.Fatalf("did not receive events")
 		}
 	}
+}
 
+func TestManyWildcardSubscriptions(t *testing.T) {
+	bus := NewBus()
+	var subs []event.Subscription
+	for i := 0; i < 10; i++ {
+		sub, err := bus.Subscribe(event.WildcardSubscription)
+		require.NoError(t, err)
+		subs = append(subs, sub)
+	}
+
+	em1, err := bus.Emitter(new(EventA))
+	require.NoError(t, err)
+	defer em1.Close()
+
+	em2, err := bus.Emitter(new(EventB))
+	require.NoError(t, err)
+	defer em2.Close()
+
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	// all 10 subscriptions received all 2 events.
+	for _, s := range subs {
+		require.Len(t, s.Out(), 2)
+	}
+
+	// close the first five subscriptions.
+	for _, s := range subs[:5] {
+		require.NoError(t, s.Close())
+	}
+
+	// emit another 2 events.
+	require.NoError(t, em1.Emit(EventA{}))
+	require.NoError(t, em2.Emit(EventB(1)))
+
+	// the first five still have 2 events, while the other five have 4 events.
+	for _, s := range subs[:5] {
+		require.Len(t, s.Out(), 2)
+	}
+
+	for _, s := range subs[5:] {
+		require.Len(t, s.Out(), 4)
+	}
+
+	// close them all, the first five will be closed twice (asserts idempotency).
+	for _, s := range subs {
+		require.NoError(t, s.Close())
+	}
+}
+
+func TestCannotSubscribeWildcardInVariadic(t *testing.T) {
+	bus := NewBus()
+
+	_, err := bus.Subscribe([]interface{}{event.WildcardSubscription, new(EventA), new(EventB)})
+	require.Error(t, err)
 }
 
 func TestSubType(t *testing.T) {
