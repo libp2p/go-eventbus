@@ -19,7 +19,7 @@ type emitterSettings struct {
 	makeStateful bool
 }
 
-// Stateful is an Emitter option which makes  the eventbus channel
+// Stateful is an Emitter option which makes the eventbus channel
 // 'remember' last event sent, and when a new subscriber joins the
 // bus, the remembered event is immediately sent to the subscription
 // channel.
