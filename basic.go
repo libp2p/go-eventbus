@@ -267,7 +267,7 @@ func (b *basicBus) GetAllEventTypes() []reflect.Type {
 	defer b.lk.RUnlock()
 
 	types := make([]reflect.Type, 0, len(b.nodes))
-	for t, _ := range b.nodes {
+	for t := range b.nodes {
 		types = append(types, t)
 	}
 	return types
