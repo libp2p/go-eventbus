@@ -1,6 +1,6 @@
 module github.com/libp2p/go-eventbus
 
-go 1.12
+go 1.15
 
 require (
 	github.com/libp2p/go-libp2p-core v0.5.7
