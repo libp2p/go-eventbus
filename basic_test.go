@@ -455,11 +455,6 @@ func TestCloseBlocking(t *testing.T) {
 	sub.Close() // cancel sub
 }
 
-func panicOnTimeout(d time.Duration) {
-	<-time.After(d)
-	panic("timeout reached")
-}
-
 func TestSubFailFully(t *testing.T) {
 	bus := NewBus()
 	em, err := bus.Emitter(new(EventB))
@@ -472,9 +467,17 @@ func TestSubFailFully(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go panicOnTimeout(5 * time.Second)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		em.Emit(EventB(159)) // will hang if sub doesn't fail properly
+	}()
 
-	em.Emit(EventB(159)) // will hang if sub doesn't fail properly
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func testMany(t testing.TB, subs, emits, msgs int, stateful bool) {
