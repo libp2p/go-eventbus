@@ -1,22 +1,10 @@
 package eventbus
 
-type subSettings struct {
-	buffer int
-}
+import "github.com/libp2p/go-libp2p/p2p/host/eventbus"
 
-var subSettingsDefault = subSettings{
-	buffer: 16,
-}
-
+// Deprecated: Use github.com/libp2p/go-libp2p/p2p/host/eventbus.BufSize instead.
 func BufSize(n int) func(interface{}) error {
-	return func(s interface{}) error {
-		s.(*subSettings).buffer = n
-		return nil
-	}
-}
-
-type emitterSettings struct {
-	makeStateful bool
+	return eventbus.BufSize(n)
 }
 
 // Stateful is an Emitter option which makes the eventbus channel
@@ -26,7 +14,7 @@ type emitterSettings struct {
 //
 // This allows to provide state tracking for dynamic systems, and/or
 // allows new subscribers to verify that there are Emitters on the channel
+// Deprecated: Use github.com/libp2p/go-libp2p/p2p/host/eventbus.Stateful instead.
 func Stateful(s interface{}) error {
-	s.(*emitterSettings).makeStateful = true
-	return nil
+	return eventbus.Stateful(s)
 }
